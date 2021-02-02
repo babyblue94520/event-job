@@ -1,13 +1,15 @@
 package pers.clare.core.scheduler.bo;
 
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 import java.util.Objects;
 
 @Getter
+@AllArgsConstructor
 public class JobKey {
-    private String group;
-    private String name;
+    protected final String group;
+    protected final String name;
 
     @Override
     public boolean equals(Object o) {

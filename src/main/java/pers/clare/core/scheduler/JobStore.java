@@ -1,18 +1,23 @@
 package pers.clare.core.scheduler;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import pers.clare.core.scheduler.bo.EventJob;
 import pers.clare.core.scheduler.bo.Job;
 
+import java.sql.SQLException;
 import java.util.List;
 
 public interface JobStore {
 
     List<Job> findAll(String instance);
 
-    Job find(String instance, String group, String name);
+    Boolean exists(String instance, String group, String name) throws SQLException;
 
-    void insert(Job job);
+    EventJob find(String instance, String group, String name) throws SQLException, JsonProcessingException;
 
-    void update(Job job);
+    void insert(String instance, EventJob job) throws SQLException, JsonProcessingException;
 
-    void delete(String instance, String group, String name);
+    void update(String instance, EventJob job) throws SQLException, JsonProcessingException;
+
+    void delete(String instance, String group, String name) throws SQLException;
 }
