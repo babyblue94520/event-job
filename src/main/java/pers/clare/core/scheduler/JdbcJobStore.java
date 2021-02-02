@@ -174,7 +174,7 @@ public class JdbcJobStore implements JobStore {
             }
             if (ps.executeUpdate() > 0) {
                 runnable.run();
-                ps = connection.prepareStatement("update schedule_job set status=?,executer=executer-1 where `instance` = ? and `group` = ? and `name` = ? and executer = 1");
+                ps = connection.prepareStatement("update schedule_job set executer=executer-1,status=if(executer==0,?,status), where `instance` = ? and `group` = ? and `name` = ?");
                 ps.setInt(1, EventJobStatus.WAITING);
                 ps.setString(2, instance);
                 ps.setString(3, eventJob.getGroup());
@@ -188,12 +188,6 @@ public class JdbcJobStore implements JobStore {
             revert(connection, autocommit, transactionIsolation);
             close(connection);
         }
-    }
-
-    private String getSelectSQL(String instance) {
-        StringBuilder sql = new StringBuilder("select `group`,`name`,timezone,description,concurrent,cron,status,prev_time,next_time,`data` from schedule_job where (`instance`,`group`,`name`) in(");
-
-        return sql.toString();
     }
 
     private void rollback(Connection connection) {
