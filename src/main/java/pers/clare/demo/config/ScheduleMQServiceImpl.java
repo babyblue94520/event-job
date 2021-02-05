@@ -9,14 +9,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.listener.PatternTopic;
 import org.springframework.stereotype.Service;
-import pers.clare.core.cache.AbstractBeeCacheMQService;
+import pers.clare.core.scheduler.AbstractScheduleMQService;
 import pers.clare.redis.MyRedisMessageListenerContainer;
 
 import java.util.function.Consumer;
 
 @Log4j2
 @Service
-public class BeeCacheMQServiceImpl extends AbstractBeeCacheMQService implements  InitializingBean {
+public class ScheduleMQServiceImpl extends AbstractScheduleMQService implements  InitializingBean {
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
 

@@ -1,6 +1,7 @@
-package pers.clare.core.scheduler.bo;
+package pers.clare.core.scheduler;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 
 import java.util.Map;
@@ -14,5 +15,6 @@ public class Job {
     private Boolean concurrent;
     private String timezone;
     private String cron;
+    private Boolean enabled;
     private Map<String, String> data;
 }

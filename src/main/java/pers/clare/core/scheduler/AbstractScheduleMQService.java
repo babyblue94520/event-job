@@ -1,4 +1,4 @@
-package pers.clare.core.cache;
+package pers.clare.core.scheduler;
 
 import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.InitializingBean;
@@ -7,7 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Log4j2
-public abstract class AbstractBeeCacheMQService implements BeeCacheMQService, InitializingBean {
+public abstract class AbstractScheduleMQService implements ScheduleMQService, InitializingBean {
 
     private List<Runnable> connectedListeners = new ArrayList<>();
 

@@ -1,4 +1,4 @@
-package pers.clare.core.scheduler.bo;
+package pers.clare.core.scheduler;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;

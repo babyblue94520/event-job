@@ -1,16 +1,15 @@
 package pers.clare.core.scheduler;
 
+import lombok.extern.log4j.Log4j2;
 import org.springframework.scheduling.support.CronSequenceGenerator;
-import pers.clare.core.scheduler.bo.EventJob;
 
-import java.time.ZoneId;
-import java.util.Date;
+import java.sql.SQLException;
 import java.util.List;
-import java.util.TimeZone;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
+@Log4j2
 class JobContext {
     Scheduler scheduler;
     EventJob eventJob;
@@ -18,7 +17,10 @@ class JobContext {
     ScheduledFuture scheduledFuture;
     List<Consumer<EventJob>> consumers;
 
-    JobContext(Scheduler scheduler, List<Consumer<EventJob>> consumers) {
+    JobContext(
+            Scheduler scheduler
+            , List<Consumer<EventJob>> consumers
+    ) {
         this.scheduler = scheduler;
         this.consumers = consumers;
     }
@@ -28,49 +30,54 @@ class JobContext {
         if (eventJob == null) {
             cronSequenceGenerator = null;
         } else {
-            String cron = eventJob.getCron();
-            String timezone = eventJob.getTimezone();
-            if (timezone == null) {
-                cronSequenceGenerator = new CronSequenceGenerator(cron);
-            } else {
-                cronSequenceGenerator = new CronSequenceGenerator(cron, TimeZone.getTimeZone(ZoneId.of(timezone)));
-            }
+            cronSequenceGenerator = JobUtil.buildCronGenerator(eventJob.getCron(), eventJob.getTimezone());
         }
-        if (scheduledFuture != null) {
-            scheduledFuture.cancel(false);
-        }
+        stop();
+        start();
     }
 
     public void addConsumer(Consumer<EventJob> consumer) {
-        this.consumers.add(consumer);
+        synchronized (this.consumers) {
+            this.consumers.add(consumer);
+        }
     }
-
 
     public void start() {
-        long nextTime = cronSequenceGenerator.next(new Date()).getTime();
-        this.scheduledFuture = scheduler.scheduledExecutorService.schedule(this::job, nextTime, TimeUnit.MILLISECONDS);
+        if (eventJob == null || !eventJob.getEnabled()) return;
+        log.info("start");
+        this.eventJob.setPrevTime(this.eventJob.getNextTime());
+        this.eventJob.setNextTime(JobUtil.getNextTime(cronSequenceGenerator));
+        this.scheduledFuture = scheduler.getScheduledExecutorService().schedule(this::job, this.eventJob.getNextTime()-System.currentTimeMillis(), TimeUnit.MILLISECONDS);
     }
 
-    public void refresh(EventJob eventJob) {
+    public void stop() {
+        log.info("stop");
+        if (this.scheduledFuture == null) return;
+        this.scheduledFuture.cancel(false);
+        this.scheduledFuture = null;
 
     }
 
     public void job() {
-        execute();
-        start();
+        log.info("job");
+        try {
+            this.eventJob.setPrevTime(this.eventJob.getNextTime());
+            this.eventJob.setNextTime(JobUtil.getNextTime(cronSequenceGenerator));
+            scheduler.getJobStore().executeLock(eventJob.getInstance(), eventJob, this::execute);
+        } catch (SQLException e) {
+            log.error(e.getMessage(), e);
+        }
     }
 
     public void execute() {
+        log.info("execute");
         for (Consumer<EventJob> consumer : consumers) {
             try {
                 consumer.accept(eventJob);
             } catch (Exception e) {
-
+                log.error(e.getMessage(), e);
             }
         }
-    }
-
-    public void stop() {
-        this.scheduledFuture.cancel(false);
+        start();
     }
 }

@@ -1,9 +1,9 @@
-package pers.clare.core.cache;
+package pers.clare.core.scheduler;
 
 
 import java.util.function.Consumer;
 
-public interface BeeCacheMQService {
+public interface ScheduleMQService {
 
     void onConnected(Runnable runnable);
 
