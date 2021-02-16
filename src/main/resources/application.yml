@@ -3,21 +3,21 @@ spring:
   jms:
     pub-sub-domain: true
   redis:
-    host: 192.168.3.106
+    host: 192.168.56.101
     port: 6379
-    password: '5d8bx2b%4it5ky74&8zokgy1cve0d@81'
+    password: 123456
     database: 0
     timeout: 10000
   datasource:
     type: com.zaxxer.hikari.HikariDataSource
-    url: jdbc:mysql://192.168.3.106:3306/ps_game_quartz?characterEncoding=utf-8&rewriteBatchedStatements=true
+    url: jdbc:mysql://192.168.56.101:3306/quartz?characterEncoding=utf-8&rewriteBatchedStatements=true
 
     hikari:
-      jdbc-url: jdbc:mysql://192.168.3.106:3306/ps_game_quartz?characterEncoding=utf-8&rewriteBatchedStatements=true
+      jdbc-url: jdbc:mysql://192.168.56.101:3306/quartz?characterEncoding=utf-8&rewriteBatchedStatements=true
       username: root
       password: 123456
-      minimum-idle: 10
-      maximum-pool-size: 1000
+      minimum-idle: 1
+      maximum-pool-size: 20
       idle-timeout: 300000
       max-lifetime: 1200000
       auto-commit: true

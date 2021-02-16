@@ -25,4 +25,14 @@ public class RedisConfig {
         container.setConnectionFactory(connectionFactory);
         return container;
     }
+
+    @Bean
+    public RedisSubListenerContainer redisSubListenerContainer(
+            RedisConnectionFactory connectionFactory
+    ) {
+        RedisSubListenerContainer container = new RedisSubListenerContainer(connectionFactory);
+        return container;
+    }
+
+
 }

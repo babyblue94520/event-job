@@ -9,6 +9,8 @@ public interface JobStore {
 
     Boolean exists(String instance, String group, String name) throws SQLException;
 
+    List<EventJob> findAll(String instance) throws SQLException, JsonProcessingException;
+
     EventJob find(String instance, String group, String name) throws SQLException, JsonProcessingException;
 
     void insert(String instance, Job job, long nextTime) throws SQLException, JsonProcessingException;

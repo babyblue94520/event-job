@@ -9,6 +9,8 @@ import pers.clare.core.scheduler.*;
 
 import javax.sql.DataSource;
 import java.util.HashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @Configuration
 public class ScheduleConfig implements InitializingBean {
@@ -18,15 +20,14 @@ public class ScheduleConfig implements InitializingBean {
 
     @Override
     public void afterPropertiesSet() throws Exception {
-        Job job = new Job("Test","test","test",true,"+08:00","0/10 * * * * ?",true,new HashMap<>());
+        Job job = new Job("Test", "test", "test", "+00:00", "0/10 * * * * ?", true, new HashMap<>());
 
-        scheduler.handler(job.getGroup(),job.getName(),(eventJob)->{
-           System.out.println(eventJob);
-            try {
-                Thread.sleep(10000);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
+        scheduler.handler(job.getGroup(), job.getName(), (eventJob) -> {
+                try {
+                    Thread.sleep(5000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
         });
         scheduler.add(job);
 
@@ -43,9 +44,9 @@ public class ScheduleConfig implements InitializingBean {
     public Scheduler scheduler(
             @Autowired JobStore jobStore
             , @Value("${cache.notify.topic:default}") String topic
-           , @Autowired(required = false) ScheduleMQService scheduleMQService
+            , @Autowired(required = false) ScheduleMQService scheduleMQService
     ) {
-        return new Scheduler(jobStore,topic,scheduleMQService);
+        return new Scheduler(jobStore, topic, scheduleMQService);
     }
 
 }

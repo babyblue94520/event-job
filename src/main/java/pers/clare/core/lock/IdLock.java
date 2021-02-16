@@ -1,8 +1,5 @@
 package pers.clare.core.lock;
 
-import lombok.AllArgsConstructor;
-import lombok.ToString;
-
 import java.lang.reflect.Constructor;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;

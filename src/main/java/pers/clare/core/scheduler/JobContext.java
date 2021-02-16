@@ -4,28 +4,32 @@ import lombok.extern.log4j.Log4j2;
 import org.springframework.scheduling.support.CronSequenceGenerator;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 @Log4j2
 class JobContext {
-    Scheduler scheduler;
-    EventJob eventJob;
-    CronSequenceGenerator cronSequenceGenerator;
-    ScheduledFuture scheduledFuture;
-    List<Consumer<EventJob>> consumers;
+    private static final ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors());
+    private Scheduler scheduler;
+    private EventJob eventJob;
+    private CronSequenceGenerator cronSequenceGenerator;
+    private ScheduledFuture scheduledFuture;
+    private List<Consumer<EventJob>> consumers = new ArrayList<>();
 
     JobContext(
             Scheduler scheduler
-            , List<Consumer<EventJob>> consumers
     ) {
         this.scheduler = scheduler;
-        this.consumers = consumers;
     }
 
-    public void setEventJob(EventJob eventJob) {
+    public void reload(EventJob eventJob) {
+        if (Objects.equals(this.eventJob, eventJob)) return;
         this.eventJob = eventJob;
         if (eventJob == null) {
             cronSequenceGenerator = null;
@@ -44,10 +48,9 @@ class JobContext {
 
     public void start() {
         if (eventJob == null || !eventJob.getEnabled()) return;
-        log.info("start");
         this.eventJob.setPrevTime(this.eventJob.getNextTime());
         this.eventJob.setNextTime(JobUtil.getNextTime(cronSequenceGenerator));
-        this.scheduledFuture = scheduler.getScheduledExecutorService().schedule(this::job, this.eventJob.getNextTime()-System.currentTimeMillis(), TimeUnit.MILLISECONDS);
+        this.scheduledFuture = scheduledExecutorService.schedule(this::job, this.eventJob.getNextTime() - System.currentTimeMillis(), TimeUnit.MILLISECONDS);
     }
 
     public void stop() {
@@ -59,7 +62,6 @@ class JobContext {
     }
 
     public void job() {
-        log.info("job");
         try {
             this.eventJob.setPrevTime(this.eventJob.getNextTime());
             this.eventJob.setNextTime(JobUtil.getNextTime(cronSequenceGenerator));
@@ -67,6 +69,7 @@ class JobContext {
         } catch (SQLException e) {
             log.error(e.getMessage(), e);
         }
+        start();
     }
 
     public void execute() {
@@ -78,6 +81,5 @@ class JobContext {
                 log.error(e.getMessage(), e);
             }
         }
-        start();
     }
 }

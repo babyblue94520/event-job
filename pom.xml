@@ -17,6 +17,7 @@
     <properties>
         <java.version>11</java.version>
         <swagger.version>2.9.2</swagger.version>
+        <maven.testUser.skip>false</maven.testUser.skip>
     </properties>
 
     <dependencies>
