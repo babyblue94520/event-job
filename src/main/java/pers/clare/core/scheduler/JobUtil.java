@@ -23,6 +23,14 @@ public class JobUtil {
         return cronSequenceGenerator.next(new Date()).getTime();
     }
 
+    public static long getNextTime(String cron, String timezone) {
+        if (timezone == null) {
+            return new CronSequenceGenerator(cron).next(new Date()).getTime();
+        } else {
+            return new CronSequenceGenerator(cron, TimeZone.getTimeZone(ZoneId.of(timezone))).next(new Date()).getTime();
+        }
+    }
+
     public static void main(String[] args) {
         String cron = "0 50 11 * * ?";
         CronSequenceGenerator cronSequenceGenerator = buildCronGenerator(cron,"-14:00");

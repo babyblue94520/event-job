@@ -1,5 +1,7 @@
 package pers.clare.core.scheduler;
 
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.scheduling.support.CronSequenceGenerator;
 
@@ -15,10 +17,11 @@ import java.util.function.Consumer;
 
 @Log4j2
 class JobContext {
-    private static final ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors());
     private Scheduler scheduler;
+    @Getter
     private EventJob eventJob;
     private CronSequenceGenerator cronSequenceGenerator;
+    @Setter
     private ScheduledFuture scheduledFuture;
     private List<Consumer<EventJob>> consumers = new ArrayList<>();
 
@@ -46,11 +49,16 @@ class JobContext {
         }
     }
 
+    public Long getNextTime(){
+        if (eventJob == null || !eventJob.getEnabled()) return null;
+        return JobUtil.getNextTime(cronSequenceGenerator);
+    }
+
     public void start() {
         if (eventJob == null || !eventJob.getEnabled()) return;
         this.eventJob.setPrevTime(this.eventJob.getNextTime());
         this.eventJob.setNextTime(JobUtil.getNextTime(cronSequenceGenerator));
-        this.scheduledFuture = scheduledExecutorService.schedule(this::job, this.eventJob.getNextTime() - System.currentTimeMillis(), TimeUnit.MILLISECONDS);
+        this.scheduledFuture = scheduler.schedule(this::job, this.eventJob.getNextTime() - System.currentTimeMillis(), TimeUnit.MILLISECONDS);
     }
 
     public void stop() {
@@ -58,10 +66,10 @@ class JobContext {
         if (this.scheduledFuture == null) return;
         this.scheduledFuture.cancel(false);
         this.scheduledFuture = null;
-
     }
 
     public void job() {
+        if (eventJob == null || !eventJob.getEnabled()) return;
         try {
             this.eventJob.setPrevTime(this.eventJob.getNextTime());
             this.eventJob.setNextTime(JobUtil.getNextTime(cronSequenceGenerator));
@@ -69,11 +77,12 @@ class JobContext {
         } catch (SQLException e) {
             log.error(e.getMessage(), e);
         }
-        start();
+        this.scheduledFuture = scheduler.schedule(this::job, this.eventJob.getNextTime() - System.currentTimeMillis(), TimeUnit.MILLISECONDS);
     }
 
     public void execute() {
         log.info("execute");
+        if (eventJob == null || !eventJob.getEnabled()) return;
         for (Consumer<EventJob> consumer : consumers) {
             try {
                 consumer.accept(eventJob);

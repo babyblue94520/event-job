@@ -5,6 +5,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.log4j.Log4j2;
 import pers.clare.core.scheduler.constant.EventJobStatus;
+import pers.clare.core.scheduler.exception.JobException;
+import pers.clare.core.scheduler.exception.JobNotExistException;
 
 import javax.sql.DataSource;
 import java.sql.*;
@@ -16,7 +18,7 @@ import java.util.concurrent.*;
 
 @Log4j2
 public class JdbcJobStore implements JobStore {
-    private static final TypeReference<Map<String, Object>> dataType = new TypeReference<Map<String, Object>>() {
+    private static final TypeReference<Map<String, Object>> dataType = new TypeReference<>() {
     };
     private static final int WAITING_TIME = 1000;
     private static final ObjectMapper om = new ObjectMapper();
@@ -27,7 +29,7 @@ public class JdbcJobStore implements JobStore {
         this.dataSource = dataSource;
     }
 
-    public Boolean exists(String instance, String group, String name) throws SQLException {
+    public Boolean exists(String instance, String group, String name) throws JobException {
         Connection connection = null;
         try {
             connection = dataSource.getConnection();
@@ -37,20 +39,22 @@ public class JdbcJobStore implements JobStore {
             ps.setString(3, name);
             return ps.executeQuery().next();
         } catch (Exception e) {
-            throw e;
+            throw new JobException(e);
         } finally {
             close(connection);
         }
     }
 
-
     @Override
-    public List<EventJob> findAll(String instance) throws SQLException, JsonProcessingException {
+    public List<EventJob> findAll(String instance) throws JobException {
         List<EventJob> result = new ArrayList<>();
         Connection connection = null;
+        Integer transactionIsolation = null;
         try {
             connection = dataSource.getConnection();
-            PreparedStatement ps = connection.prepareStatement("select `instance`,`group`,`name`,timezone,description,cron,prev_time,next_time,enabled,`data` from event_job where `instance` = ?");
+            transactionIsolation = connection.getTransactionIsolation();
+            connection.setTransactionIsolation(Connection.TRANSACTION_READ_UNCOMMITTED);
+            PreparedStatement ps = connection.prepareStatement("select `instance`,`group`,`name`,timezone,description,cron,`status`,prev_time,next_time,enabled,`data` from event_job where `instance` = ?");
             ps.setString(1, instance);
             ResultSet rs = ps.executeQuery();
             while (rs.next()) {
@@ -58,18 +62,19 @@ public class JdbcJobStore implements JobStore {
             }
             return result;
         } catch (Exception e) {
-            throw e;
+            throw new JobException(e);
         } finally {
+            revert(connection, null, transactionIsolation);
             close(connection);
         }
     }
 
     @Override
-    public EventJob find(String instance, String group, String name) throws SQLException, JsonProcessingException {
+    public EventJob find(String instance, String group, String name) throws JobException {
         Connection connection = null;
         try {
             connection = dataSource.getConnection();
-            PreparedStatement ps = connection.prepareStatement("select `instance`,`group`,`name`,timezone,description,cron,prev_time,next_time,enabled,`data` from event_job where `instance` = ? and `group` = ? and `name` = ?");
+            PreparedStatement ps = connection.prepareStatement("select `instance`,`group`,`name`,timezone,description,cron,`status`,prev_time,next_time,enabled,`data` from event_job where `instance` = ? and `group` = ? and `name` = ?");
             ps.setString(1, instance);
             ps.setString(2, group);
             ps.setString(3, name);
@@ -79,7 +84,7 @@ public class JdbcJobStore implements JobStore {
             }
             return null;
         } catch (Exception e) {
-            throw e;
+            throw new JobException(e);
         } finally {
             close(connection);
         }
@@ -90,7 +95,7 @@ public class JdbcJobStore implements JobStore {
             String instance
             , Job job
             , long nextTime
-    ) throws SQLException, JsonProcessingException {
+    ) throws JobException {
         Connection connection = null;
         try {
             connection = dataSource.getConnection();
@@ -107,7 +112,7 @@ public class JdbcJobStore implements JobStore {
             ps.setString(index++, om.writeValueAsString(job.getData()));
             ps.executeUpdate();
         } catch (Exception e) {
-            throw e;
+            throw new JobException(e);
         } finally {
             close(connection);
         }
@@ -118,7 +123,7 @@ public class JdbcJobStore implements JobStore {
             String instance
             , Job job
             , long nextTime
-    ) throws SQLException, JsonProcessingException {
+    ) throws JobException {
         Connection connection = null;
         try {
             connection = dataSource.getConnection();
@@ -135,14 +140,14 @@ public class JdbcJobStore implements JobStore {
             ps.setString(index++, job.getName());
             ps.executeUpdate();
         } catch (Exception e) {
-            throw e;
+            throw new JobException(e);
         } finally {
             close(connection);
         }
     }
 
     @Override
-    public void delete(String instance, String group, String name) throws SQLException {
+    public void delete(String instance, String group, String name) throws JobException {
         Connection connection = null;
         try {
             connection = dataSource.getConnection();
@@ -152,18 +157,17 @@ public class JdbcJobStore implements JobStore {
             ps.setString(3, name);
             ps.executeUpdate();
         } catch (Exception e) {
-            throw e;
+            throw new JobException(e);
         } finally {
             close(connection);
         }
     }
 
-
     public void executeLock(
             String instance
             , EventJob eventJob
             , Runnable runnable
-    ) throws SQLException {
+    ) throws Exception {
         String group = eventJob.getGroup();
         String name = eventJob.getName();
 
@@ -175,53 +179,65 @@ public class JdbcJobStore implements JobStore {
             transactionIsolation = connection.getTransactionIsolation();
             connection.setTransactionIsolation(Connection.TRANSACTION_READ_UNCOMMITTED);
             if (!isContinue(connection, instance, group, name)) {
-                log.info("cancel");
                 return;
             }
             autocommit = connection.getAutoCommit();
             connection.setAutoCommit(false);
-
-            PreparedStatement ps = connection.prepareStatement("update event_job set status=?,prev_time=?,next_time=? where `instance` = ? and `group` = ? and `name` = ? and enabled = 1 and status = ? and prev_time<?");
-            int index = 1;
-            ps.setInt(index++, EventJobStatus.EXECUTING);
-            ps.setLong(index++, eventJob.getPrevTime());
-            ps.setLong(index++, eventJob.getNextTime());
-            ps.setString(index++, instance);
-            ps.setString(index++, group);
-            ps.setString(index++, name);
-            ps.setInt(index++, EventJobStatus.WAITING);
-            ps.setLong(index++, eventJob.getPrevTime() - WAITING_TIME);
-            // 確認該任務是否被鎖定中
-            ScheduledFuture scheduledFuture = scheduledExecutorService.schedule(() -> {
-                try {
-                    ps.cancel();
-                } catch (SQLException e) {
-                    log.error(e.getMessage(), e);
-                }
-            }, WAITING_TIME, TimeUnit.MILLISECONDS);
-            ps.executeUpdate();
-            scheduledFuture.cancel(true);
-            if (!scheduledFuture.isCancelled() || ps.getUpdateCount() == 0) {
+            if (compete(connection, eventJob) == 0) {
                 rollback(connection);
                 return;
             }
             runnable.run();
-            PreparedStatement ps2 = connection.prepareStatement("update event_job set status=? where `instance` = ? and `group` = ? and `name` = ?");
-            index = 1;
-            ps2.setInt(index++, EventJobStatus.WAITING);
-            ps2.setString(index++, instance);
-            ps2.setString(index++, group);
-            ps2.setString(index++, name);
-
-            ps2.executeUpdate();
+            afterExecute(connection, instance, group, name);
             connection.commit();
         } catch (Exception e) {
             rollback(connection);
-            log.warn(e.getMessage());
+            throw e;
         } finally {
             revert(connection, autocommit, transactionIsolation);
             close(connection);
         }
+    }
+
+    private int compete(
+            Connection connection
+            , EventJob eventJob
+    ) throws SQLException {
+        PreparedStatement ps = connection.prepareStatement("update event_job set status=?,prev_time=?,next_time=? where `instance` = ? and `group` = ? and `name` = ? and enabled = 1 and status = ? and next_time<?");
+        int index = 1;
+        ps.setInt(index++, EventJobStatus.EXECUTING);
+        ps.setLong(index++, eventJob.getPrevTime());
+        ps.setLong(index++, eventJob.getNextTime());
+        ps.setString(index++, eventJob.getInstance());
+        ps.setString(index++, eventJob.getGroup());
+        ps.setString(index++, eventJob.getName());
+        ps.setLong(index++, eventJob.getNextTime());
+        // 確認該任務是否被鎖定中
+        ScheduledFuture scheduledFuture = scheduledExecutorService.schedule(() -> {
+            try {
+                ps.cancel();
+            } catch (SQLException e) {
+                log.error(e.getMessage(), e);
+            }
+        }, WAITING_TIME, TimeUnit.MILLISECONDS);
+        int count = ps.executeUpdate();
+        scheduledFuture.cancel(true);
+        return scheduledFuture.isCancelled() ? 0 : count;
+    }
+
+    private int afterExecute(
+            Connection connection
+            , String instance
+            , String group
+            , String name
+    ) throws SQLException {
+        PreparedStatement ps = connection.prepareStatement("update event_job set status=? where `instance` = ? and `group` = ? and `name` = ?");
+        int index = 1;
+        ps.setInt(index++, EventJobStatus.WAITING);
+        ps.setString(index++, instance);
+        ps.setString(index++, group);
+        ps.setString(index++, name);
+        return ps.executeUpdate();
     }
 
     private boolean isContinue(
@@ -230,16 +246,17 @@ public class JdbcJobStore implements JobStore {
             , String group
             , String name
     ) throws SQLException {
-        PreparedStatement ps = connection.prepareStatement("select status from event_job  where `instance` = ? and `group` = ? and `name` = ?");
+        PreparedStatement ps = connection.prepareStatement("select status,enabled from event_job where `instance` = ? and `group` = ? and `name` = ? and enabled = 1");
         int index = 1;
         ps.setString(index++, instance);
         ps.setString(index++, group);
         ps.setString(index++, name);
         ResultSet rs = ps.executeQuery();
         if (rs.next()) {
-            return Objects.equals(EventJobStatus.WAITING, rs.getInt(1));
+            return Objects.equals(EventJobStatus.WAITING, rs.getInt(1))
+                    && Objects.equals(1, rs.getInt(2));
         }
-        return false;
+        throw new JobNotExistException(String.format("Job(%s,%s,%s) not exist.", instance, group, name));
     }
 
     private void rollback(Connection connection) {
@@ -283,6 +300,7 @@ public class JdbcJobStore implements JobStore {
                 , rs.getString(index++)
                 , rs.getString(index++)
                 , rs.getString(index++)
+                , rs.getInt(index++)
                 , rs.getLong(index++)
                 , rs.getLong(index++)
                 , rs.getBoolean(index++)
