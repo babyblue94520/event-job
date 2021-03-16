@@ -1,12 +1,11 @@
 package pers.clare.core.scheduler;
 
 import pers.clare.core.scheduler.exception.JobException;
+import pers.clare.core.scheduler.impl.EventJob;
 
 import java.util.List;
 
 public interface JobStore {
-
-    Boolean exists(String instance, String group, String name) throws JobException;
 
     List<EventJob> findAll(String instance) throws JobException;
 
@@ -18,9 +17,12 @@ public interface JobStore {
 
     void delete(String instance, String group, String name) throws JobException;
 
-    void executeLock(
-            String instance
-            , EventJob eventJob
+    void enable(String instance, String group, String name) throws JobException;
+
+    void disable(String instance, String group, String name) throws JobException;
+
+    int executor(
+            EventJob eventJob
             , Runnable runnable
-    ) throws Exception;
+    ) throws JobException;
 }

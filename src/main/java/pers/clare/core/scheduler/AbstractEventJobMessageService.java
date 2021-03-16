@@ -7,7 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Log4j2
-public abstract class AbstractScheduleMQService implements ScheduleMQService, InitializingBean {
+public abstract class AbstractEventJobMessageService implements EventJobMessageService, InitializingBean {
 
     private List<Runnable> connectedListeners = new ArrayList<>();
 
@@ -16,6 +16,9 @@ public abstract class AbstractScheduleMQService implements ScheduleMQService, In
         connectedListeners.add(runnable);
     }
 
+    /**
+     * 連線成功
+     */
     protected void publishConnectedEvent(){
         for (Runnable runnable : connectedListeners) {
             try {

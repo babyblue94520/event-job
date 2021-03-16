@@ -1,4 +1,4 @@
-package pers.clare.core.scheduler;
+package pers.clare.core.scheduler.impl;
 
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -22,6 +22,10 @@ public class EventJob {
     private Long prevTime;
     @Setter(AccessLevel.PACKAGE)
     private Long nextTime;
+    @Setter(AccessLevel.PACKAGE)
+    private Long startTime;
+    @Setter(AccessLevel.PACKAGE)
+    private Long endTime;
     private Boolean enabled;
     private Map<String, Object> data;
 

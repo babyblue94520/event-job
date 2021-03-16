@@ -3,7 +3,7 @@ package pers.clare.core.scheduler;
 
 import java.util.function.Consumer;
 
-public interface ScheduleMQService {
+public interface EventJobMessageService {
 
     void onConnected(Runnable runnable);
 

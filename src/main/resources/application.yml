@@ -1,5 +1,8 @@
 
 spring:
+  profiles:
+    include:
+      - event-job
   jms:
     pub-sub-domain: true
   redis:
