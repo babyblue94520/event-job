@@ -6,7 +6,7 @@
 
 ## 目標
 
-- 將執行任務和管理任務的分開在不同專案上實作
+- 將**執行任務**和**管理任務**分開在不同專案上實作
 - 
 - 避免網路 __I/O__ 和資料結構轉換的消耗，提高效能
 - 相容 __Spring Cacheable__
@@ -23,33 +23,89 @@
 
 ### 任務管理服務
 
-* 配置排程任務管理器
-* 新增任務，如果任務已存，則檢查是否有異動並更新任務
+一、配置 **Scheduler**
+  
+  * **任務管理專案**和**任務執行專案**都需要配置
+  
+    **一般**
 
+    * 預設每**1**分鐘從資料庫查詢最新任務資訊
 
-```java
-@Configuration
-public class ScheduleConfig implements InitializingBean {
+    ```java
+    @Configuration
+    public class ScheduleConfig {
 
-  @Autowired
-  private Scheduler scheduler;
+      @Bean
+      public Scheduler scheduler(
+              @Value("${event-job.name}") String instance // 自訂義 schedule instance 名稱
+              , @Qualifier("dataSource") DataSource dataSource // 持久化資料庫來源
+      ) {
+        return new SchedulerImpl(instance, dataSource);
+      }
+    }
+    ```
+  
+    **進階**
 
-  @Override
-  public void afterPropertiesSet() throws Exception {
-    // 新增任務
-    Job job = new Job("Test", "test", "test", "+00:00", "0/1 * * * * ?", true, null);
-    scheduler.add(job);
+      * 透過實作 **EventJobMessageService** 發布任務更新事件，以 **Redis** 為例
+      * 預設每 **10** 分鐘從資料庫查詢最新任務資訊
+      
+      ```java
+      @Configuration
+      public class ScheduleConfig implements InitializingBean {
+
+          @Bean
+          public Scheduler scheduler(
+                  @Value("${event-job.name}") String instance // 自訂義 schedule instance 名稱
+                  , @Qualifier("dataSource") DataSource dataSource // 持久化資料庫來源
+                  , @Value("${event-job.topic}") String topic // Topic
+                  , EventJobMessageService eventJobMessageService // MessageService
+          ) {
+              return new SchedulerImpl(instance, dataSource, topic, eventJobMessageService);
+          }
+      }
+      ```
+      
+
+二、新增任務
+  
+  * 僅需配置在**任務管理專案**中
+  * 如果任務已存，則檢查是否有異動並更新任務
+
+  ```java
+  @Configuration
+  public class ScheduleJobConfig implements InitializingBean {
+
+    @Autowired
+    private Scheduler scheduler;
+
+    @Override
+    public void afterPropertiesSet() throws Exception {
+      // 新增任務
+      Job job = new Job("group", "name", "description", "+00:00", "0/1 * * * * ?", true, null);
+      scheduler.add(job);
+    }
   }
+  ```
 
-  @Bean
-  public Scheduler scheduler(
-          @Value("${event-job.name}") String instance
-          , @Value("${event-job.topic}") String topic
-          , @Qualifier("dataSource") DataSource dataSource
-          , EventJobMessageService eventJobMessageService
-  ) {
-    return new SchedulerImpl(instance, dataSource, topic, eventJobMessageService);
+三、註冊任務處理
+  
+  * 僅需配置在**任務執行專案**中
+  * 同時可以配置在多個**任務執行專案**中，同一時間僅會有一個服務執行任務
+
+  ```java
+  @Component
+  public class JobHandler implements InitializingBean {
+
+    @Autowired
+    private Scheduler scheduler;
+
+    @Override
+    public void afterPropertiesSet() throws Exception {
+      // 註冊任務處理
+      scheduler.register("group", "name", eventJob -> {
+          // TODO
+      });
+    }
   }
-}
-```
-
+  ```
