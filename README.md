@@ -21,9 +21,7 @@
 
 ## 使用
 
-### 任務管理服務
-
-一、配置 **Scheduler**
+### 一、配置 **Scheduler**
   
   * **任務管理專案**和**任務執行專案**都需要配置
   
@@ -37,12 +35,28 @@
 
         @Bean
         public Scheduler scheduler(
+               @Qualifier("dataSource") DataSource dataSource // 持久化資料庫來源
+        ) {
+          return new SchedulerImpl(dataSource);
+        }
+      }
+      ```
+      
+      **or**
+      
+      ```java
+      @Configuration
+      public class ScheduleConfig {
+
+        @Bean
+        public Scheduler scheduler(
                 @Value("${event-job.name}") String instance // 自訂義 schedule instance 名稱
                 , @Qualifier("dataSource") DataSource dataSource // 持久化資料庫來源
         ) {
           return new SchedulerImpl(instance, dataSource);
         }
       }
+      
       ```
   
     **進階**
@@ -56,18 +70,17 @@
 
             @Bean
             public Scheduler scheduler(
-                    @Value("${event-job.name}") String instance // 自訂義 schedule instance 名稱
-                    , @Qualifier("dataSource") DataSource dataSource // 持久化資料庫來源
+                    @Qualifier("dataSource") DataSource dataSource // 持久化資料庫來源
                     , @Value("${event-job.topic}") String topic // Topic
                     , EventJobMessageService eventJobMessageService // MessageService
             ) {
-                return new SchedulerImpl(instance, dataSource, topic, eventJobMessageService);
+                return new SchedulerImpl(dataSource, topic, eventJobMessageService);
             }
         }
         ```
       
 
-二、新增任務
+### 二、新增任務
   
   * 僅需配置在**任務管理專案**中
   * 如果任務已存，則檢查是否有異動並更新任務
@@ -88,7 +101,7 @@
     }
     ```
 
-三、註冊任務處理
+### 三、註冊任務處理
   
   * 僅需配置在**任務執行專案**中
   * 同時可以配置在多個**任務執行專案**中，同一時間僅會有一個服務執行任務
