@@ -19,6 +19,14 @@
 - 移除參考 **Java Class** 為執行對象
 - 以 **job group、job name** 註冊任務處理器
 
+### Architecture
+
+![](./images/event_job.png)
+
+### Execution
+
+![](./images/job_running.png)
+
 ## 使用
 
 ### 一、配置 **Scheduler**
