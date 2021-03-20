@@ -22,9 +22,6 @@
 ### Architecture
 
 ![](./images/event_job.png)
-
-### Execution
-
 ![](./images/job_running.png)
 
 ## 使用
