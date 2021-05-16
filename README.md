@@ -1,129 +1,142 @@
-# 分散式事件排程任務
+# Event Job
 
-## 事由
+## Cause
 
-想在後臺管理系統介面化管理 **Quartz Job**，就必須將所有 **Job Class** 導入管理系統中，但也強迫系統成為 **Quartz Cluster** 節點之一，導致伺服器資源被 **Job** 占用，所以開發一套基於事件綁定的排程任務管理器，解決任務管理和任務執行的相依性
+想在後臺管理系統介面化管理 **Quartz Job**，就必須將所有 **Job Class** 導入管理系統中，但也強迫系統成為 **Quartz Cluster** 節點之一，導致伺服器資源被 **Job**
+占用，所以開發一套基於事件綁定的排程任務管理器，解決任務管理和任務執行的相依性
 
-## 目標
+## Goal
 
-- 將**執行任務**和**管理任務**分開在不同專案上實作
-- 
-- 避免網路 __I/O__ 和資料結構轉換的消耗，提高效能
-- 相容 __Spring Cacheable__
+* Separate job managers and executors on different project
 
+## Requirement
 
-## 設計
+* Spring Boot 2+
+* Java 8+
 
-- 使用 **RDBS** 做任務持久化
-- 使用 **Message Queue Service** 發布任務更新
-- 移除參考 **Java Class** 為執行對象
-- 以 **job group、job name** 註冊任務處理器
-
-### Architecture
+## Overview
 
 ![](./images/event_job.png)
 ![](./images/job_running.png)
 
-## 使用
+## QuickStart
 
-### 一、配置 **Scheduler**
+### pom.xml
+
+```xml
+
+<dependency>
+    <groupId>io.github.babyblue94520</groupId>
+    <artifactId>event-job</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+</dependency>
+```
+
+### yaml
+
+```yaml
+event-job:
+  instance: eventJobScheduler
+  topic: event.jobt
+  reload-interval: 60000
+  thread-count: 20 # default processors * 2
+  shutdown-wait: 180 # second
+  persistence: true // persistent jobs to the database, false is only in the memory
+  datasource:
+    url: jdbc:mysql://192.168.56.101:3306/quartz?characterEncoding=utf-8
+    username: root
+    password: 123456
+    minimum-idle: 1
+    maximum-pool-size: 20
+    idle-timeout: 300000
+    max-lifetime: 1200000
+    auto-commit: true
+```
+
+### Config
+
+```java
+
+@EnableEventJob
+public class EventJobConfig {
+
+}
+```
+
+### Create or modify job
+
+```java
+@EnableEventJob
+public class EventJobConfig {
+
+@Autowired
+private Scheduler scheduler;
+
+@Override
+public void afterPropertiesSet() throws Exception {
+  // 新增任務
+  Job job = new Job("group", "name", "event", "description", "+00:00", "0/1 * * * * ?", true, null);
+  scheduler.add(job);
+}
+}
+```
+
+### Register job executor
+
+```java
+@EnableEventJob
+public class EventJobConfig {
+
+  @Autowired
+  private Scheduler scheduler;
   
-  * **任務管理專案**和**任務執行專案**都需要配置
-  
-    **一般**
+  @Override
+  public void afterPropertiesSet() throws Exception {
+      scheduler.addExecutor("event",(eventJob)->{
+          // TODO
+      });
+  }
+}
+```
 
-    * 預設每**1**分鐘從資料庫查詢最新任務資訊
+### Add MessageService
 
-      ```java
-      @Configuration
-      public class ScheduleConfig {
+* Notify jobs changes immediately
 
-        @Bean
-        public Scheduler scheduler(
-               @Qualifier("dataSource") DataSource dataSource // 持久化資料庫來源
-        ) {
-          return new SchedulerImpl(dataSource);
-        }
-      }
-      ```
-      
-      **or**
-      
-      ```java
-      @Configuration
-      public class ScheduleConfig {
+**Example**
 
-        @Bean
-        public Scheduler scheduler(
-                @Value("${event-job.name}") String instance // 自訂義 schedule instance 名稱
-                , @Qualifier("dataSource") DataSource dataSource // 持久化資料庫來源
-        ) {
-          return new SchedulerImpl(instance, dataSource);
-        }
-      }
-      
-      ```
-  
-    **進階**
+```java
+@Log4j2
+@Service
+public class EventJobMessageServiceImpl extends AbstractEventJobMessageService implements InitializingBean {
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
 
-      * 透過實作 **EventJobMessageService** 發布任務更新事件，以 **Redis** 為例
-      * 預設每 **10** 分鐘從資料庫查詢最新任務資訊
-      
-        ```java
-        @Configuration
-        public class ScheduleConfig implements InitializingBean {
+    @Autowired
+    private MyRedisMessageListenerContainer listenerContainer;
 
-            @Bean
-            public Scheduler scheduler(
-                    @Qualifier("dataSource") DataSource dataSource // 持久化資料庫來源
-                    , @Value("${event-job.topic}") String topic // Topic
-                    , EventJobMessageService eventJobMessageService // MessageService
-            ) {
-                return new SchedulerImpl(dataSource, topic, eventJobMessageService);
+    @Autowired
+    private DefaultClientResources defaultClientResources;
+
+    @Override
+    public void afterPropertiesSet() throws Exception {
+        defaultClientResources.eventBus().get().subscribe((event) -> {
+            if (event instanceof ConnectedEvent) {
+                publishConnectedEvent();
             }
-        }
-        ```
-      
-
-### 二、新增任務
-  
-  * 僅需配置在**任務管理專案**中
-  * 如果任務已存，則檢查是否有異動並更新任務
-
-    ```java
-    @Configuration
-    public class ScheduleJobConfig implements InitializingBean {
-
-      @Autowired
-      private Scheduler scheduler;
-
-      @Override
-      public void afterPropertiesSet() throws Exception {
-        // 新增任務
-        Job job = new Job("group", "name", "description", "+00:00", "0/1 * * * * ?", true, null);
-        scheduler.add(job);
-      }
-    }
-    ```
-
-### 三、註冊任務處理
-  
-  * 僅需配置在**任務執行專案**中
-  * 同時可以配置在多個**任務執行專案**中，同一時間僅會有一個服務執行任務
-
-    ```java
-    @Component
-    public class JobHandler implements InitializingBean {
-
-      @Autowired
-      private Scheduler scheduler;
-
-      @Override
-      public void afterPropertiesSet() throws Exception {
-        // 註冊任務處理
-        scheduler.register("group", "name", eventJob -> {
-            // TODO
         });
-      }
     }
-    ```
+
+    @Override
+    public void send(String topic, String body) {
+        stringRedisTemplate.convertAndSend(topic, body);
+    }
+
+    @Override
+    public void addListener(String topic, Consumer<String> listener) {
+        listenerContainer.addMessageListener((message, pattern) -> {
+            listener.accept(new String(message.getBody()));
+        }, new PatternTopic(topic));
+    }
+}
+```

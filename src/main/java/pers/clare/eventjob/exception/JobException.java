@@ -1,4 +1,4 @@
-package pers.clare.core.scheduler.exception;
+package pers.clare.eventjob.exception;
 
 public class JobException extends RuntimeException {
     public JobException(String message) {

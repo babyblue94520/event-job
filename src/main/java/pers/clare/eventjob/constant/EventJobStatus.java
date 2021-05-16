@@ -1,4 +1,4 @@
-package pers.clare.core.scheduler.constant;
+package pers.clare.eventjob.constant;
 
 public interface EventJobStatus {
     int WAITING = 0;

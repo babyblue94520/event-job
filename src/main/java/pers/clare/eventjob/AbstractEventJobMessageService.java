@@ -1,15 +1,16 @@
-package pers.clare.core.scheduler;
+package pers.clare.eventjob;
 
-import lombok.extern.log4j.Log4j2;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.InitializingBean;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
-@Log4j2
 public abstract class AbstractEventJobMessageService implements EventJobMessageService, InitializingBean {
+    private static final Logger log = LogManager.getLogger();
 
-    private List<Runnable> connectedListeners = new ArrayList<>();
+    private List<Runnable> connectedListeners = new CopyOnWriteArrayList<>();
 
     @Override
     public void onConnected(Runnable runnable) {

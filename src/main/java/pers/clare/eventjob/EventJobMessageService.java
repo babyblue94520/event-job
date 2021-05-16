@@ -1,4 +1,4 @@
-package pers.clare.core.scheduler;
+package pers.clare.eventjob;
 
 
 import java.util.function.Consumer;
