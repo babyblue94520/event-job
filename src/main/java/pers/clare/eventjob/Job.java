@@ -27,6 +27,15 @@ public class Job {
         this.data = data;
     }
 
+    @Override
+    public String toString() {
+        return "Job{" +
+                "group='" + group + '\'' +
+                ", name='" + name + '\'' +
+                ", event='" + event + '\'' +
+                '}';
+    }
+
     public String getGroup() {
         return group;
     }

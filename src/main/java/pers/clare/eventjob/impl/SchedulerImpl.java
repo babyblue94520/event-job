@@ -135,7 +135,7 @@ public class SchedulerImpl implements Scheduler, InitializingBean, DisposableBea
     public void removeExecutor(String event, JobExecutor jobExecutor) {
         List<JobExecutor> jobExecutors = eventJobExecutors.get(event);
         if (jobExecutors == null) return;
-        jobExecutors.remove(jobExecutor);
+        jobExecutors.removeAll(Collections.singletonList(jobExecutor));
     }
 
     /**

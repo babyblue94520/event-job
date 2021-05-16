@@ -37,7 +37,7 @@ public class JdbcJobStoreImpl implements JobStore {
 
     private static final String findAll = "select `instance`,`group`,`name`,event,timezone,description,cron,`status`,prev_time,next_time,start_time,end_time,enabled,`data` from event_job where `instance` = ?";
 
-    private static final String findAllByGroup = "select `instance`,`group`,`name`,event,timezone,description,cron,`status`,prev_time,next_time,start_time,end_time,enabled,`data` from event_job where `instance` = ? and group = ?";
+    private static final String findAllByGroup = "select `instance`,`group`,`name`,event,timezone,description,cron,`status`,prev_time,next_time,start_time,end_time,enabled,`data` from event_job where `instance` = ? and `group` = ?";
 
     private static final String find = "select `instance`,`group`,`name`,event,timezone,description,cron,`status`,prev_time,next_time,start_time,end_time,enabled,`data` from event_job where `instance` = ? and `group` = ? and `name` = ?";
 

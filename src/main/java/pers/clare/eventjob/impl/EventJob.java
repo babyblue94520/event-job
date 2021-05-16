@@ -36,6 +36,16 @@ public class EventJob {
         this.data = data;
     }
 
+    @Override
+    public String toString() {
+        return "EventJob{" +
+                "instance='" + instance + '\'' +
+                ", group='" + group + '\'' +
+                ", name='" + name + '\'' +
+                ", event='" + event + '\'' +
+                '}';
+    }
+
     public String getInstance() {
         return instance;
     }
