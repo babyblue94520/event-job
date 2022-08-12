@@ -2,6 +2,7 @@ package pers.clare.eventjob.impl;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.springframework.lang.NonNull;
 
 import java.util.concurrent.ScheduledFuture;
 
@@ -9,26 +10,35 @@ class JobContext {
     private static final Logger log = LogManager.getLogger();
     private volatile EventJob eventJob;
     private volatile ScheduledFuture<?> scheduledFuture;
+    private volatile boolean running = false;
 
-    JobContext(EventJob eventJob) {
-        this.eventJob = eventJob;
+    /**
+     * waiting for check reply
+     */
+    private volatile boolean waiting = false;
+
+    JobContext(@NonNull EventJob eventJob) {
+        setEventJob(eventJob);
     }
 
-    public void stop() {
-        if (this.scheduledFuture == null) return;
-        try {
-            this.scheduledFuture.cancel(false);
-        } catch (Exception e) {
-            log.warn(e.getMessage());
+    void stop() {
+        ScheduledFuture<?> future;
+        synchronized (this) {
+            if ((future = this.scheduledFuture) == null) return;
+            this.scheduledFuture = null;
         }
-        this.scheduledFuture = null;
+        try {
+            future.cancel(false);
+        } catch (Exception e) {
+            log.warn(e.getMessage(), e);
+        }
     }
 
-    public boolean isCancel() {
-        return eventJob == null || !eventJob.getEnabled();
+    boolean isCancel() {
+        return !eventJob.getEnabled();
     }
 
-    public void setScheduledFuture(ScheduledFuture<?> scheduledFuture) {
+    void setScheduledFuture(ScheduledFuture<?> scheduledFuture) {
         stop();
         this.scheduledFuture = scheduledFuture;
     }
@@ -37,7 +47,31 @@ class JobContext {
         return eventJob;
     }
 
-    public void setEventJob(EventJob eventJob) {
+    void setEventJob(@NonNull EventJob eventJob) {
         this.eventJob = eventJob;
+    }
+
+    boolean isRunning() {
+        return running;
+    }
+
+    void start() {
+        running = true;
+    }
+
+    void end() {
+        running = false;
+    }
+
+    boolean isWaiting() {
+        return waiting;
+    }
+
+    void pause() {
+        waiting = true;
+    }
+
+    void proceed() {
+        waiting = false;
     }
 }

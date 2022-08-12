@@ -12,7 +12,7 @@
 ## Requirement
 
 * Spring Boot 2+
-* Java 8+
+* Java 11+
 
 ## Overview
 
@@ -37,20 +37,10 @@
 ```yaml
 event-job:
   instance: eventJobScheduler
-  topic: event.jobt
+  topic: event.job
   reload-interval: 60000
   thread-count: 20 # default processors * 2
-  shutdown-wait: 180 # second
-  persistence: true // persistent jobs to the database, false is only in the memory
-  datasource:
-    url: jdbc:mysql://192.168.56.101:3306/quartz?characterEncoding=utf-8
-    username: root
-    password: 123456
-    minimum-idle: 1
-    maximum-pool-size: 20
-    idle-timeout: 300000
-    max-lifetime: 1200000
-    auto-commit: true
+  check-wait-time: 1000 # Wait time to check if a job is being processed
 ```
 
 ### Config
@@ -69,15 +59,19 @@ public class EventJobConfig {
 @EnableEventJob
 public class EventJobConfig {
 
-@Autowired
-private Scheduler scheduler;
+    @Autowired
+    private EventScheduler eventScheduler;
 
-@Override
-public void afterPropertiesSet() throws Exception {
-  // 新增任務
-  Job job = new Job("group", "name", "event", "description", "+00:00", "0/1 * * * * ?", true, null);
-  scheduler.add(job);
-}
+    @Override
+    public void afterPropertiesSet() throws Exception {
+        eventScheduler.add(EventJob.builder()
+                .group("group")
+                .name("name")
+                .event("event")
+                .cron("*/1 * * * * ?")
+                .timezone("+00:00")
+                .build());
+    }
 }
 ```
 
@@ -85,15 +79,15 @@ public void afterPropertiesSet() throws Exception {
 
 ```java
 @EnableEventJob
-public class EventJobConfig {
+public class EventJobRegister implements InitializingBean{
 
   @Autowired
-  private Scheduler scheduler;
+  private EventScheduler eventScheduler;
   
   @Override
   public void afterPropertiesSet() throws Exception {
-      scheduler.addExecutor("event",(eventJob)->{
-          // TODO
+      eventScheduler.addHandler(eventJob.getEvent(), (eventJob2) -> {
+          // Do something
       });
   }
 }
@@ -108,35 +102,52 @@ public class EventJobConfig {
 ```java
 @Log4j2
 @Service
-public class EventJobMessageServiceImpl extends AbstractEventJobMessageService implements InitializingBean {
-    @Autowired
-    private StringRedisTemplate stringRedisTemplate;
+public class EventJobMessageServiceImpl implements EventJobMessageService {
+
+    private static final Map<String, List<Consumer<String>>> topicListenerMap = new ConcurrentHashMap<>();
+    private static final ExecutorService executor = Executors.newFixedThreadPool(1);
+
+    @Override
+    public Runnable onConnected(Runnable runnable) {
+        return null;
+    }
+
+    @Override
+    public String send(String topic, String body) {
+        executor.submit(() -> {
+            topicListenerMap.getOrDefault(topic, Collections.emptyList()).forEach(consumer -> consumer.accept(body));
+        });
+        return body;
+    }
+
+    @Override
+    public Consumer<String> addListener(String topic, Consumer<String> listener) {
+        topicListenerMap.computeIfAbsent(topic, (key) -> new CopyOnWriteArrayList<>()).add(listener);
+        return listener;
+    }
+}
+```
+
+### Create a job that depends on a job
+
+```java
+@EnableEventJob
+public class EventJobConfig {
 
     @Autowired
-    private MyRedisMessageListenerContainer listenerContainer;
-
-    @Autowired
-    private DefaultClientResources defaultClientResources;
+    private EventScheduler eventScheduler;
 
     @Override
     public void afterPropertiesSet() throws Exception {
-        defaultClientResources.eventBus().get().subscribe((event) -> {
-            if (event instanceof ConnectedEvent) {
-                publishConnectedEvent();
-            }
-        });
-    }
-
-    @Override
-    public void send(String topic, String body) {
-        stringRedisTemplate.convertAndSend(topic, body);
-    }
-
-    @Override
-    public void addListener(String topic, Consumer<String> listener) {
-        listenerContainer.addMessageListener((message, pattern) -> {
-            listener.accept(new String(message.getBody()));
-        }, new PatternTopic(topic));
+        // Execute after 'group-name' job completes.
+        eventScheduler.add(EventJob.builder()
+                .group("after-group")
+                .name("after-name")
+                .event("after-event")
+                .afterGroup("group")
+                .afterName("name")
+                .timezone("+00:00")
+                .build());
     }
 }
 ```

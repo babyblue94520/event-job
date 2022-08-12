@@ -1,141 +1,51 @@
 package pers.clare.eventjob.impl;
 
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NonNull;
+
+import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 
+@SuppressWarnings("UnusedAssignment")
+@Getter
+@Builder(toBuilder = true)
 public class EventJob {
-    private String instance;
+    @NonNull
     private String group;
+    @NonNull
     private String name;
+    @NonNull
     private String event;
+    @NonNull
     private String timezone;
-    private String description;
-    private String cron;
-    private Integer status;
-    private Long prevTime;
-    private Long nextTime;
-    private Long startTime;
-    private Long endTime;
-    private Boolean enabled;
-    private Map<String, Object> data;
-
-    public EventJob(String instance, String group, String name, String event, String timezone, String description, String cron, Integer status, Long prevTime, Long nextTime, Long startTime, Long endTime, Boolean enabled, Map<String, Object> data) {
-        this.instance = instance;
-        this.group = group;
-        this.name = name;
-        this.event = event;
-        this.timezone = timezone;
-        this.description = description;
-        this.cron = cron;
-        this.status = status;
-        this.prevTime = prevTime;
-        this.nextTime = nextTime;
-        this.startTime = startTime;
-        this.endTime = endTime;
-        this.enabled = enabled;
-        this.data = data;
-    }
+    @NonNull
+    @Builder.Default
+    private String description = "";
+    @NonNull
+    @Builder.Default
+    private String cron = "";
+    @NonNull
+    @Builder.Default
+    private String afterGroup = "";
+    @NonNull
+    @Builder.Default
+    private String afterName = "";
+    @NonNull
+    @Builder.Default
+    private Boolean enabled = true;
+    @NonNull
+    @Builder.Default
+    private Map<String, Object> data = Collections.emptyMap();
 
     @Override
     public String toString() {
         return "EventJob{" +
-                "instance='" + instance + '\'' +
-                ", group='" + group + '\'' +
-                ", name='" + name + '\'' +
-                ", event='" + event + '\'' +
+                "group=\"" + group + '\"' +
+                ", name=\"" + name + '\"' +
+                ", event=\"" + event + '\"' +
                 '}';
-    }
-
-    public String getInstance() {
-        return instance;
-    }
-
-    public String getGroup() {
-        return group;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public String getEvent() {
-        return event;
-    }
-
-    public String getTimezone() {
-        return timezone;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public String getCron() {
-        return cron;
-    }
-
-    public Integer getStatus() {
-        return status;
-    }
-
-    public Long getPrevTime() {
-        return prevTime;
-    }
-
-    public Long getNextTime() {
-        return nextTime;
-    }
-
-    public Long getStartTime() {
-        return startTime;
-    }
-
-    public Long getEndTime() {
-        return endTime;
-    }
-
-    public Boolean getEnabled() {
-        return enabled;
-    }
-
-    public Map<String, Object> getData() {
-        return data;
-    }
-
-    void setTimezone(String timezone) {
-        this.timezone = timezone;
-    }
-
-    void setDescription(String description) {
-        this.description = description;
-    }
-
-    void setCron(String cron) {
-        this.cron = cron;
-    }
-
-    void setPrevTime(Long prevTime) {
-        this.prevTime = prevTime;
-    }
-
-    void setNextTime(Long nextTime) {
-        this.nextTime = nextTime;
-    }
-
-    void setStartTime(Long startTime) {
-        this.startTime = startTime;
-    }
-
-    void setEndTime(Long endTime) {
-        this.endTime = endTime;
-    }
-
-    void setEnabled(Boolean enabled) {
-        this.enabled = enabled;
-    }
-
-    void setData(Map<String, Object> data) {
-        this.data = data;
     }
 
     @Override
@@ -143,11 +53,11 @@ public class EventJob {
         if (this == o) return true;
         if (!(o instanceof EventJob)) return false;
         EventJob eventJob = (EventJob) o;
-        return Objects.equals(instance, eventJob.instance) && Objects.equals(group, eventJob.group) && Objects.equals(name, eventJob.name);
+        return Objects.equals(group, eventJob.group) && Objects.equals(name, eventJob.name);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(instance, group, name);
+        return Objects.hash(group, name);
     }
 }

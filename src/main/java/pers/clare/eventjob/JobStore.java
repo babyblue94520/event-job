@@ -1,37 +1,47 @@
 package pers.clare.eventjob;
 
+import org.springframework.lang.NonNull;
 import pers.clare.eventjob.exception.JobException;
-import pers.clare.eventjob.function.JobExecutor;
 import pers.clare.eventjob.impl.EventJob;
 
 import java.util.List;
 
+@SuppressWarnings("UnusedReturnValue")
 public interface JobStore {
-
+    @NonNull
     List<EventJob> findAll(String instance) throws JobException;
 
+    @NonNull
     List<EventJob> findAll(String instance, String group) throws JobException;
 
-    EventJob find(String instance, String group, String name) throws JobException;
+    EventJob find(@NonNull String instance, @NonNull String group, @NonNull String name) throws JobException;
 
-    void insert(String instance, Job job, long nextTime) throws JobException;
+    void insert(@NonNull String instance, @NonNull EventJob job, @NonNull long nextTime) throws JobException;
 
-    void update(String instance, Job job, long nextTime) throws JobException;
+    void update(@NonNull String instance, @NonNull EventJob job, @NonNull long nextTime) throws JobException;
 
-    void delete(String instance, String group) throws JobException;
+    void delete(@NonNull String instance, @NonNull String group) throws JobException;
 
-    void delete(String instance, String group, String name) throws JobException;
+    void delete(@NonNull String instance, @NonNull String group, @NonNull String name) throws JobException;
 
-    void enable(String instance, String group) throws JobException;
+    void enable(@NonNull String instance, @NonNull String group) throws JobException;
 
-    void enable(String instance, String group, String name) throws JobException;
+    void enable(@NonNull String instance, @NonNull String group, @NonNull String name) throws JobException;
 
-    void disable(String instance, String group) throws JobException;
+    void disable(@NonNull String instance, @NonNull String group) throws JobException;
 
-    void disable(String instance, String group, String name) throws JobException;
+    void disable(@NonNull String instance, @NonNull String group, @NonNull String name) throws JobException;
 
-    int executor(
-            EventJob eventJob
-            , JobExecutor executor
-    ) throws JobException;
+    JobStatus getStatus(@NonNull String instance, @NonNull String group, @NonNull String name);
+
+    @NonNull
+    int release(@NonNull String instance, @NonNull String group, @NonNull String name, @NonNull long nextTime);
+
+    @NonNull
+    int compete(@NonNull String instance, @NonNull String group, @NonNull String name
+            , @NonNull long nextTime, @NonNull long startTime);
+
+    @NonNull
+    int finish(@NonNull String instance, @NonNull String group, @NonNull String name, @NonNull long endTime);
+
 }

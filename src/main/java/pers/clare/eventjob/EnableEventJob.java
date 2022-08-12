@@ -6,11 +6,12 @@ import org.springframework.core.annotation.AliasFor;
 
 import java.lang.annotation.*;
 
+@SuppressWarnings("unused")
 @Target({ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 @Inherited
-@Import({EventJobConfiguration.class})
+@Import({EventJobProperties.class})
 @Configuration
 public @interface EnableEventJob {
     @AliasFor(
