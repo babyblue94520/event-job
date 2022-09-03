@@ -1,8 +1,9 @@
 package pers.clare.eventjob;
 
+import pers.clare.eventjob.vo.DependentJob;
+import pers.clare.eventjob.vo.EventJob;
 import org.springframework.lang.NonNull;
 import pers.clare.eventjob.exception.JobException;
-import pers.clare.eventjob.impl.EventJob;
 
 import java.util.List;
 
@@ -15,6 +16,8 @@ public interface JobStore {
     List<EventJob> findAll(String instance, String group) throws JobException;
 
     EventJob find(@NonNull String instance, @NonNull String group, @NonNull String name) throws JobException;
+
+    DependentJob findDependentJob(@NonNull String instance, @NonNull String group, @NonNull String name) throws JobException;
 
     void insert(@NonNull String instance, @NonNull EventJob job, @NonNull long nextTime) throws JobException;
 

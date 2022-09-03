@@ -1,5 +1,6 @@
-package pers.clare.eventjob.impl;
+package pers.clare.eventjob.vo;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
@@ -11,7 +12,8 @@ import java.util.Objects;
 @SuppressWarnings("UnusedAssignment")
 @Getter
 @Builder(toBuilder = true)
-public class EventJob {
+@AllArgsConstructor
+public class EventJob{
     @NonNull
     private String group;
     @NonNull

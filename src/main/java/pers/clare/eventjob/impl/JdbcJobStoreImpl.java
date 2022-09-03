@@ -3,6 +3,8 @@ package pers.clare.eventjob.impl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import pers.clare.eventjob.vo.DependentJob;
+import pers.clare.eventjob.vo.EventJob;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.InitializingBean;
@@ -38,13 +40,15 @@ public class JdbcJobStoreImpl implements JobStore, InitializingBean {
 
     private static final String findStatus = "select status, next_time, enabled from event_job where `instance` = ? and `group` = ? and `name` = ?";
 
-    private static final String insert = "insert into event_job(`instance`,`group`,`name`,event,timezone,description,cron,after_group,after_name,next_time,enabled,`data`,end_time,prev_time,start_time,status) values(?,?,?,?,?,?,?,?,?,?,?,?,0,0,0,0)";
+    private static final String findDependentJob = "select cron,timezone,after_group,after_name from event_job where `instance` = ? and `group` = ? and `name` = ?";
+
+    private static final String insert = "insert into event_job(`instance`,`group`,`name`,event,timezone,description,cron,after_group,after_name,next_time,enabled,`data`) values(?,?,?,?,?,?,?,?,?,?,?,?)";
 
     private static final String update = "update event_job set event=?,timezone=?,description=?,cron=?,next_time=?,enabled=?,`data`=? where `instance` = ? and `group` = ? and `name` = ?";
 
     private static final String updateRelease = "update event_job set status=? where `instance` = ? and `group` = ? and `name` = ? and status = ? and next_time<?";
 
-    private static final String updateExecuting = "update event_job set status=?,prev_time=next_time,next_time=?,start_time=?,end_time=0 where `instance` = ? and `group` = ? and `name` = ? and enabled = 1 and status = ? and next_time<?";
+    private static final String updateExecuting = "update event_job set status=?,prev_time=start_time,next_time=?,start_time=?,end_time=0 where `instance` = ? and `group` = ? and `name` = ? and enabled = 1 and status = ? and next_time<?";
 
     private static final String updateExecuted = "update event_job set status=?,end_time=? where `instance` = ? and `group` = ? and `name` = ?";
 
@@ -123,6 +127,30 @@ public class JdbcJobStoreImpl implements JobStore, InitializingBean {
             setValue(ps, instance, group, name);
             ResultSet rs = ps.executeQuery();
             return rs.next() ? to(rs) : null;
+        } catch (Exception e) {
+            throw new JobException(e);
+        } finally {
+            close(connection);
+        }
+    }
+
+    @Override
+    public DependentJob findDependentJob(String instance, String group, String name) throws JobException {
+        Connection connection = null;
+        try {
+            connection = dataSource.getConnection();
+            PreparedStatement ps = connection.prepareStatement(findDependentJob);
+            setValue(ps, instance, group, name);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                return new DependentJob(
+                        rs.getString(1)
+                        , rs.getString(2)
+                        ,rs.getString(3)
+                        , rs.getString(4)
+                );
+            }
+            return null;
         } catch (Exception e) {
             throw new JobException(e);
         } finally {

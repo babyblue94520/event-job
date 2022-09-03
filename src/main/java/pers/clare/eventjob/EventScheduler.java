@@ -1,9 +1,9 @@
 package pers.clare.eventjob;
 
 
+import pers.clare.eventjob.vo.EventJob;
 import org.springframework.lang.NonNull;
 import pers.clare.eventjob.function.JobHandler;
-import pers.clare.eventjob.impl.EventJob;
 
 import java.util.List;
 

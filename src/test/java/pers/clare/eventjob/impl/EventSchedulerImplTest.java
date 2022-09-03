@@ -1,5 +1,6 @@
 package pers.clare.eventjob.impl;
 
+import pers.clare.eventjob.vo.EventJob;
 import lombok.extern.log4j.Log4j2;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -380,7 +381,7 @@ class EventSchedulerImplTest {
 
         private void delay() {
             try {
-                Thread.sleep(2000);
+                Thread.sleep(1000);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -388,7 +389,7 @@ class EventSchedulerImplTest {
 
         private void sleep() {
             try {
-                Thread.sleep(10000);
+                Thread.sleep(2000);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -414,6 +415,7 @@ class EventSchedulerImplTest {
             eventScheduler.add(afterJob2);
             eventScheduler.add(sameGroupJob);
             eventScheduler.add(differentGroupJob);
+            reset();
         }
 
         @AfterAll
@@ -492,9 +494,12 @@ class EventSchedulerImplTest {
         @Test
         @Order(6)
         void enableGroup() {
-            eventScheduler.enable(job.getGroup());
+            eventScheduler.disable(job.getGroup());
+            delay();
             reset();
+            eventScheduler.enable(job.getGroup());
             sleep();
+            eventScheduler.disable(job.getGroup());
             assertGreaterZero(getSumCount(job));
             assertGreaterZero(getSumCount(sameGroupJob));
             assertGreaterZero(getSumCount(differentGroupJob));

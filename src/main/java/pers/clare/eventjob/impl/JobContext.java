@@ -1,5 +1,6 @@
 package pers.clare.eventjob.impl;
 
+import pers.clare.eventjob.vo.EventJob;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.lang.NonNull;

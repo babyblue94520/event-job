@@ -1,5 +1,7 @@
 package pers.clare.eventjob.impl;
 
+import pers.clare.eventjob.vo.DependentJob;
+import pers.clare.eventjob.vo.EventJob;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.DisposableBean;
@@ -139,17 +141,12 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
         return jobStore.find(getInstance(), group, name);
     }
 
-    /**
-     * add or update job
-     */
     public void add(@NonNull EventJob job) {
         String group = job.getGroup();
         String name = job.getName();
-        long nextTime;
+        Long nextTime = 0L;
         if (StringUtils.hasLength(job.getCron())) {
             nextTime = JobUtil.getNextTime(job.getCron(), job.getTimezone());
-        } else {
-            nextTime = 0;
         }
         EventJob eventJob = jobStore.find(getInstance(), group, name);
         if (eventJob == null) {
@@ -186,9 +183,6 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
         }
     }
 
-    /**
-     * enable job (start)
-     */
     @Override
     public void enable(String group) {
         jobStore.enable(getInstance(), group);
@@ -331,20 +325,17 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
             JobStatus jobStatus = jobStore.getStatus(instance, group, name);
             if (jobStatus == null) return false;
             if (!force && !jobStatus.getEnabled()) return false;
+            Long nextTime = getOrFindNextTime(eventJob);
+            if (Objects.equals(EventJobStatus.EXECUTING, jobStatus.getStatus())
+                    && nextTime.compareTo(jobStatus.getNextTime()) > 0
+            ) {
+                checkJobReallyInProgress(jobContext, nextTime);
+                return false;
+            }
 
-            if (StringUtils.hasLength(eventJob.getCron())) {
-                Long nextTime = JobUtil.getNextTime(eventJob.getCron(), eventJob.getTimezone());
-                if (Objects.equals(EventJobStatus.EXECUTING, jobStatus.getStatus())
-                        && nextTime.compareTo(jobStatus.getNextTime()) > 0
-                ) {
-                    checkJobReallyInProgress(jobContext, nextTime);
-                    return false;
-                }
-
-                if (!force) {
-                    int compete = jobStore.compete(instance, group, name, nextTime, System.currentTimeMillis());
-                    if (compete == 0) return true;
-                }
+            if (!force) {
+                int compete = jobStore.compete(instance, group, name, nextTime, System.currentTimeMillis());
+                if (compete == 0) return true;
             }
 
             jobContext.start();
@@ -369,7 +360,7 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
         return false;
     }
 
-    private void checkJobReallyInProgress(@NonNull JobContext jobContext, long nextTime) {
+    private void checkJobReallyInProgress(@NonNull JobContext jobContext, Long nextTime) {
         if (jobContext.isRunning()) return;
         log.warn("Check that the job is actually being executed.({})", jobContext.getEventJob());
         String token = UUID.randomUUID().toString();
@@ -390,7 +381,7 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
         }, eventJobProperties.getCheckWaitTime(), TimeUnit.MILLISECONDS);
     }
 
-    private void tryRelease(JobContext jobContext, long nextTime) {
+    private void tryRelease(JobContext jobContext, Long nextTime) {
         log.warn("Revert job status.({})", jobContext.getEventJob());
         int release = jobStore.release(
                 getInstance()
@@ -400,6 +391,26 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
         );
         if (release == 0) return;
         doExecute(jobContext, false);
+    }
+
+    private Long getOrFindNextTime(EventJob eventJob) {
+        if (StringUtils.hasLength(eventJob.getCron())) {
+            return JobUtil.getNextTime(eventJob.getCron(), eventJob.getTimezone());
+        } else if (StringUtils.hasLength(eventJob.getAfterGroup())) {
+            return getOrFindNextTime(jobStore.findDependentJob(getInstance(), eventJob.getAfterGroup(), eventJob.getAfterName()));
+        }
+        return 0L;
+    }
+
+    private Long getOrFindNextTime(DependentJob dependentJob) {
+        if (dependentJob != null) {
+            if (StringUtils.hasLength(dependentJob.getCron())) {
+                return JobUtil.getNextTime(dependentJob.getCron(), dependentJob.getTimezone());
+            } else if (StringUtils.hasLength(dependentJob.getAfterGroup())) {
+                return getOrFindNextTime(jobStore.findDependentJob(getInstance(), dependentJob.getAfterGroup(), dependentJob.getAfterName()));
+            }
+        }
+        return 0L;
     }
 
     @NonNull
