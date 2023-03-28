@@ -12,8 +12,6 @@ public class EventJobProperties {
 
     private String instance = "eventJobScheduler";
 
-    private String topic = "event.job";
-
     private Integer threadCount = 1;
 
     /**
@@ -32,14 +30,6 @@ public class EventJobProperties {
 
     public void setInstance(String instance) {
         this.instance = instance;
-    }
-
-    public String getTopic() {
-        return topic;
-    }
-
-    public void setTopic(String topic) {
-        this.topic = topic;
     }
 
     public Integer getThreadCount() {

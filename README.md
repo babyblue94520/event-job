@@ -37,7 +37,6 @@
 ```yaml
 event-job:
   instance: eventJobScheduler
-  topic: event.job
   reload-interval: 60000
   thread-count: 20 # default processors * 2
   check-wait-time: 1000 # Wait time to check if a job is being processed
@@ -100,29 +99,26 @@ public class EventJobRegister implements InitializingBean{
 **Example**
 
 ```java
+import java.util.concurrent.CopyOnWriteArrayList;
+
 @Log4j2
 @Service
 public class EventJobMessageServiceImpl implements EventJobMessageService {
 
-    private static final Map<String, List<Consumer<String>>> topicListenerMap = new ConcurrentHashMap<>();
+    private static final List<Consumer<String>> listeners = new CopyOnWriteArrayList<>();
     private static final ExecutorService executor = Executors.newFixedThreadPool(1);
 
     @Override
-    public Runnable onConnected(Runnable runnable) {
-        return null;
-    }
-
-    @Override
-    public String send(String topic, String body) {
+    public String send(String body) {
         executor.submit(() -> {
-            topicListenerMap.getOrDefault(topic, Collections.emptyList()).forEach(consumer -> consumer.accept(body));
+            listeners.forEach(consumer -> consumer.accept(body));
         });
         return body;
     }
 
     @Override
-    public Consumer<String> addListener(String topic, Consumer<String> listener) {
-        topicListenerMap.computeIfAbsent(topic, (key) -> new CopyOnWriteArrayList<>()).add(listener);
+    public Consumer<String> addListener(Consumer<String> listener) {
+        listeners.add(listener);
         return listener;
     }
 }

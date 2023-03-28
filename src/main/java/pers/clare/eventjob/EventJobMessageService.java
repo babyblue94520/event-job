@@ -7,10 +7,8 @@ import java.util.function.Consumer;
 @SuppressWarnings("UnusedReturnValue")
 public interface EventJobMessageService {
 
-    Runnable onConnected(@NonNull Runnable runnable);
+    void send(@NonNull String body);
 
-    String send(@NonNull String topic, @NonNull String body);
-
-    Consumer<String> addListener(@NonNull String topic, @NonNull Consumer<String> listener);
+    void addListener(@NonNull Consumer<String> listener);
 
 }

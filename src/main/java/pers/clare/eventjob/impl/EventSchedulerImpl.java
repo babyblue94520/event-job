@@ -11,6 +11,7 @@ import org.springframework.lang.NonNull;
 import org.springframework.scheduling.concurrent.CustomizableThreadFactory;
 import org.springframework.util.StringUtils;
 import pers.clare.eventjob.*;
+import pers.clare.eventjob.constant.EventJobEventType;
 import pers.clare.eventjob.constant.EventJobStatus;
 import pers.clare.eventjob.exception.JobException;
 import pers.clare.eventjob.function.JobHandler;
@@ -20,10 +21,15 @@ import java.lang.management.ManagementFactory;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @SuppressWarnings("unused")
 public class EventSchedulerImpl implements EventScheduler, InitializingBean, DisposableBean, CommandLineRunner {
-    protected static final String eventSplit = ",";
+    protected static final String eventSplit = "\n";
+
+    protected static final Pattern eventSplitPattern = Pattern.compile("([^" + eventSplit + "]+)" + eventSplit + "?");
+
     private static final Logger log = LogManager.getLogger();
     private final ConcurrentMap<String, ConcurrentMap<String, JobContext>> jobGroupContextMap = new ConcurrentHashMap<>();
 
@@ -58,36 +64,11 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
         this.eventJobMessageService = eventJobMessageService;
     }
 
-
-    private String getChangeTopic() {
-        return eventJobProperties.getTopic() + '.' + getInstance() + ".change";
-    }
-
-    private String getExecuteTopic() {
-        return eventJobProperties.getTopic() + '.' + getInstance() + ".execute";
-    }
-
-    private String getCheckAskTopic() {
-        return eventJobProperties.getTopic() + '.' + getInstance() + ".check";
-    }
-
-    private String getCheckReplyTopic() {
-        return eventJobProperties.getTopic() + '.' + getInstance() + ".reply";
-    }
-
-    private String getCompleteTopic() {
-        return eventJobProperties.getTopic() + '.' + getInstance() + ".complete";
-    }
-
     @Override
     public void afterPropertiesSet() {
         if (eventJobMessageService != null) {
             eventJobMessageService.onConnected(this::reload);
-            eventJobMessageService.addListener(getChangeTopic(), this::changeEventHandler);
-            eventJobMessageService.addListener(getExecuteTopic(), this::executeEventHandler);
-            eventJobMessageService.addListener(getCheckAskTopic(), this::checkAskEventHandler);
-            eventJobMessageService.addListener(getCheckReplyTopic(), this::checkReplayEventHandler);
-            eventJobMessageService.addListener(getCompleteTopic(), this::completeEventHandler);
+            eventJobMessageService.addListener(this::eventHandler);
         }
     }
 
@@ -479,22 +460,42 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
     }
 
     private void notifyChange(@NonNull String group) {
-        if (eventJobMessageService == null) return;
-        eventJobMessageService.send(getChangeTopic(), group);
+        notifyEvent(EventJobEventType.CHANGE, group);
     }
 
-    private void notifyChange(@NonNull String group, @NonNull String name) {
-        if (eventJobMessageService == null) return;
-        eventJobMessageService.send(getChangeTopic(), group + eventSplit + name);
+    private void notifyChange(@NonNull String group, String name) {
+        notifyEvent(EventJobEventType.CHANGE, group, name);
     }
 
-    private void changeEventHandler(@NonNull String body) {
+    private void eventHandler(String body) {
+        String[] array = splitMessage(body);
+        if (array.length < 1) return;
+        String type = array[0];
+        switch (type) {
+            case EventJobEventType.CHECK:
+                checkAskEventHandler(array[1], array[2], array[3]);
+                break;
+            case EventJobEventType.REPLY:
+                checkReplayEventHandler(array[1]);
+                break;
+            case EventJobEventType.CHANGE:
+                changeEventHandler(array[1], array[2]);
+                break;
+            case EventJobEventType.EXECUTE:
+                executeEventHandler(array[1], array[2]);
+                break;
+            case EventJobEventType.COMPLETE:
+                completeEventHandler(array[1], array[2]);
+                break;
+        }
+    }
+
+    private void changeEventHandler(String group, String name) {
         try {
-            String[] data = body.split(eventSplit);
-            if (data.length == 1) {
-                reload(data[0]);
-            } else if (data.length == 2) {
-                reload(data[0], data[1]);
+            if (name == null) {
+                reload(group);
+            } else {
+                reload(group, name);
             }
         } catch (Exception e) {
             log.error(e.getMessage(), e);
@@ -502,22 +503,19 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
     }
 
     private void notifyExecute(@NonNull String group) {
-        if (eventJobMessageService == null) return;
-        eventJobMessageService.send(getExecuteTopic(), group);
+        notifyEvent(EventJobEventType.EXECUTE, group);
     }
 
     private void notifyExecute(@NonNull String group, @NonNull String name) {
-        if (eventJobMessageService == null) return;
-        eventJobMessageService.send(getExecuteTopic(), group + eventSplit + name);
+        notifyEvent(EventJobEventType.EXECUTE, group, name);
     }
 
-    private void executeEventHandler(@NonNull String body) {
+    private void executeEventHandler(String group, String name) {
         try {
-            String[] data = body.split(eventSplit);
-            if (data.length == 1) {
-                executeJobHandler(data[0]);
-            } else if (data.length == 2) {
-                executeJobHandler(data[0], data[1]);
+            if (name == null) {
+                executeJobHandler(group);
+            } else {
+                executeJobHandler(group, name);
             }
         } catch (Exception e) {
             log.error(e.getMessage(), e);
@@ -525,37 +523,28 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
     }
 
     private void notifyComplete(@NonNull String group, @NonNull String name) {
-        if (eventJobMessageService == null) return;
-        eventJobMessageService.send(getCompleteTopic(), group + eventSplit + name);
+        notifyEvent(EventJobEventType.COMPLETE, group, name);
     }
 
-    private void completeEventHandler(@NonNull String body) {
+    private void completeEventHandler(String group, String name) {
         try {
-            String[] data = body.split(eventSplit);
-            if (data.length == 2) {
-                completeJobHandler(data[0], data[1]);
-            }
+            completeJobHandler(group, name);
         } catch (Exception e) {
             log.error(e.getMessage(), e);
         }
     }
 
     private void notifyCheckAsk(@NonNull String token, @NonNull String group, @NonNull String name) {
-        if (eventJobMessageService == null) return;
-        eventJobMessageService.send(getCheckAskTopic(), token + eventSplit + group + eventSplit + name);
+        notifyEvent(EventJobEventType.CHECK, group, name, token);
     }
 
     private void notifyCheckReply(@NonNull String token) {
-        if (eventJobMessageService == null) return;
-        eventJobMessageService.send(getCheckReplyTopic(), token);
+        notifyEvent(EventJobEventType.REPLY, token);
     }
 
-    private void checkAskEventHandler(@NonNull String body) {
+    private void checkAskEventHandler(String group, String name, String token) {
         try {
-            String[] data = body.split(eventSplit);
-            if (data.length != 3) return;
-            String token = data[0];
-            JobContext jobContext = getJobContext(data[1], data[2]);
+            JobContext jobContext = getJobContext(group, name);
             if (jobContext == null) return;
             if (jobContext.isRunning()) {
                 notifyCheckReply(token);
@@ -565,7 +554,7 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
         }
     }
 
-    private void checkReplayEventHandler(@NonNull String token) {
+    private void checkReplayEventHandler(String token) {
         try {
             checkMap.remove(token);
         } catch (Exception e) {
@@ -590,6 +579,24 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
     private double getCpuUsage() {
         return ((com.sun.management.OperatingSystemMXBean) ManagementFactory
                 .getOperatingSystemMXBean()).getSystemCpuLoad();
+    }
+
+    private void notifyEvent(String type, String... args) {
+        if (eventJobMessageService == null) return;
+        StringBuilder message = new StringBuilder(type);
+        for (String arg : args) {
+            message.append(eventSplit).append(arg);
+        }
+        eventJobMessageService.send(message.toString());
+    }
+
+    private String[] splitMessage(String message) {
+        List<String> list = new ArrayList<>();
+        Matcher m = eventSplitPattern.matcher(message);
+        while (m.find()) {
+            list.add(m.group(1));
+        }
+        return list.toArray(new String[4]);
     }
 }
 
