@@ -67,7 +67,6 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
     @Override
     public void afterPropertiesSet() {
         if (eventJobMessageService != null) {
-            eventJobMessageService.onConnected(this::reload);
             eventJobMessageService.addListener(this::eventHandler);
         }
     }
