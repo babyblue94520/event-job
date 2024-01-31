@@ -72,7 +72,7 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
     }
 
     @Override
-    public void destroy() throws Exception {
+    public void destroy() {
         if (executor == null) return;
         log.info("Shutdown...");
         executor.shutdownNow();
@@ -124,7 +124,7 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
     public void add(@NonNull EventJob job) {
         String group = job.getGroup();
         String name = job.getName();
-        Long nextTime = 0L;
+        long nextTime = 0L;
         if (StringUtils.hasLength(job.getCron())) {
             nextTime = JobUtil.getNextTime(job.getCron(), job.getTimezone());
         }
@@ -197,7 +197,7 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
     @Override
     public void execute(String group) {
         if (eventJobMessageService == null) {
-            executeJobHandler(group);
+            executeJobHandler(group, System.currentTimeMillis());
         } else {
             notifyExecute(group);
         }
@@ -206,7 +206,7 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
     @Override
     public void execute(String group, String name) {
         if (eventJobMessageService == null) {
-            executeJobHandler(group, name);
+            executeJobHandler(group, name, System.currentTimeMillis());
         } else {
             notifyExecute(group, name);
         }
@@ -273,7 +273,7 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
         EventJob eventJob = jobContext.getEventJob();
         if (StringUtils.hasLength(eventJob.getCron())) {
             jobContext.setScheduledFuture(executor.schedule(() -> {
-                if (doExecute(jobContext, false)) {
+                if (doExecute(jobContext)) {
                     addSchedule(jobContext);
                 }
             }, JobUtil.getNextDelay(eventJob.getCron(), eventJob.getTimezone()), TimeUnit.MILLISECONDS));
@@ -286,11 +286,18 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
         }
     }
 
-    private boolean doExecute(@NonNull JobContext jobContext, boolean force) {
+    private boolean doExecute(@NonNull JobContext jobContext) {
+        return this.doExecute(jobContext, null);
+    }
+
+    /**
+     * @param executeTime Execution command time. schedule job is null.
+     */
+    private boolean doExecute(@NonNull JobContext jobContext, Long executeTime) {
         EventJob eventJob = jobContext.getEventJob();
         List<JobHandler> jobHandlers = getJobHandlers(eventJob.getEvent());
         if (jobHandlers.size() == 0) return true;
-        if (!force && isCancel(jobContext)) return false;
+        if (executeTime == null && isCancel(jobContext)) return false;
         if (jobContext.isRunning()) return true;
 
         delayExecute();
@@ -304,19 +311,22 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
 
             JobStatus jobStatus = jobStore.getStatus(instance, group, name);
             if (jobStatus == null) return false;
-            if (!force && !jobStatus.getEnabled()) return false;
+            if (!jobStatus.getEnabled() && executeTime == null) return false;
             Long nextTime = getOrFindNextTime(eventJob);
             if (Objects.equals(EventJobStatus.EXECUTING, jobStatus.getStatus())
-                    && nextTime.compareTo(jobStatus.getNextTime()) > 0
+                && nextTime.compareTo(jobStatus.getNextTime()) > 0
             ) {
                 checkJobReallyInProgress(jobContext, nextTime);
                 return false;
             }
 
-            if (!force) {
-                int compete = jobStore.compete(instance, group, name, nextTime, System.currentTimeMillis());
-                if (compete == 0) return true;
+            int compete;
+            if (executeTime == null) {
+                compete = jobStore.compete(instance, group, name, nextTime, System.currentTimeMillis());
+            } else {
+                compete = jobStore.compete(instance, group, name, executeTime);
             }
+            if (compete == 0) return true;
 
             jobContext.start();
             for (JobHandler jobHandler : jobHandlers) {
@@ -362,15 +372,16 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
     }
 
     private void tryRelease(JobContext jobContext, Long nextTime) {
-        log.warn("Revert job status.({})", jobContext.getEventJob());
+        EventJob eventJob = jobContext.getEventJob();
+        log.warn("Revert job status.({})", eventJob);
         int release = jobStore.release(
                 getInstance()
-                , jobContext.getEventJob().getGroup()
-                , jobContext.getEventJob().getName()
+                , eventJob.getGroup()
+                , eventJob.getName()
                 , nextTime
         );
         if (release == 0) return;
-        doExecute(jobContext, false);
+        doExecute(jobContext);
     }
 
     private Long getOrFindNextTime(EventJob eventJob) {
@@ -398,18 +409,18 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
         return eventJobHandlersMap.computeIfAbsent(event, (key) -> Collections.emptyList());
     }
 
-    private void executeJobHandler(String group) {
+    private void executeJobHandler(String group, Long time) {
         if (eventJobHandlersMap.size() == 0) return;
         List<EventJob> eventJobs = jobStore.findAll(getInstance(), group);
         for (EventJob eventJob : eventJobs) {
-            executeJobHandler(eventJob.getGroup(), eventJob.getName());
+            executeJobHandler(eventJob.getGroup(), eventJob.getName(), time);
         }
     }
 
-    private void executeJobHandler(String group, String name) {
+    private void executeJobHandler(String group, String name, Long time) {
         JobContext jobContext = getJobContext(group, name);
         if (jobContext == null) return;
-        doExecute(jobContext, true);
+        doExecute(jobContext, time);
     }
 
     private void completeJobHandler(String group, String name) {
@@ -418,12 +429,12 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
             Map.Entry<String, String> entry = it.next();
             JobContext jobContext = getJobContext(entry.getKey(), entry.getValue());
             if (jobContext == null
-                    || StringUtils.hasLength(jobContext.getEventJob().getCron())
+                || StringUtils.hasLength(jobContext.getEventJob().getCron())
             ) {
                 it.remove();
                 continue;
             }
-            doExecute(jobContext, false);
+            doExecute(jobContext);
         }
     }
 
@@ -449,13 +460,13 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
 
     private boolean hasChange(@NonNull EventJob job, @NonNull EventJob eventJob) {
         return Objects.equals(job.getGroup(), eventJob.getGroup())
-                && Objects.equals(job.getName(), eventJob.getName())
-                && Objects.equals(job.getEvent(), eventJob.getEvent())
-                && Objects.equals(job.getDescription(), eventJob.getDescription())
-                && Objects.equals(job.getTimezone(), eventJob.getTimezone())
-                && Objects.equals(job.getCron(), eventJob.getCron())
-                && Objects.equals(job.getEnabled(), eventJob.getEnabled())
-                && Objects.equals(job.getData(), eventJob.getData());
+               && Objects.equals(job.getName(), eventJob.getName())
+               && Objects.equals(job.getEvent(), eventJob.getEvent())
+               && Objects.equals(job.getDescription(), eventJob.getDescription())
+               && Objects.equals(job.getTimezone(), eventJob.getTimezone())
+               && Objects.equals(job.getCron(), eventJob.getCron())
+               && Objects.equals(job.getEnabled(), eventJob.getEnabled())
+               && Objects.equals(job.getData(), eventJob.getData());
     }
 
     private void notifyChange(@NonNull String group) {
@@ -467,8 +478,9 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
     }
 
     private void eventHandler(String body) {
-        String[] array = splitMessage(body);
-        if (array.length < 1) return;
+        String[] result = body.split(eventSplit);
+        String[] array = new String[4];
+        System.arraycopy(result, 0, array, 0, result.length);
         String type = array[0];
         switch (type) {
             case EventJobEventType.CHECK:
@@ -481,7 +493,7 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
                 changeEventHandler(array[1], array[2]);
                 break;
             case EventJobEventType.EXECUTE:
-                executeEventHandler(array[1], array[2]);
+                executeEventHandler(array[1], array[2], array[3]);
                 break;
             case EventJobEventType.COMPLETE:
                 completeEventHandler(array[1], array[2]);
@@ -502,19 +514,19 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
     }
 
     private void notifyExecute(@NonNull String group) {
-        notifyEvent(EventJobEventType.EXECUTE, group);
+        notifyEvent(EventJobEventType.EXECUTE, group, "", String.valueOf(System.currentTimeMillis()));
     }
 
     private void notifyExecute(@NonNull String group, @NonNull String name) {
-        notifyEvent(EventJobEventType.EXECUTE, group, name);
+        notifyEvent(EventJobEventType.EXECUTE, group, name, String.valueOf(System.currentTimeMillis()));
     }
 
-    private void executeEventHandler(String group, String name) {
+    private void executeEventHandler(String group, String name, String time) {
         try {
-            if (name == null) {
-                executeJobHandler(group);
+            if (Objects.equals(name, "")) {
+                executeJobHandler(group, Long.valueOf(time));
             } else {
-                executeJobHandler(group, name);
+                executeJobHandler(group, name, Long.valueOf(time));
             }
         } catch (Exception e) {
             log.error(e.getMessage(), e);

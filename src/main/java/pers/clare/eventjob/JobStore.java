@@ -44,6 +44,14 @@ public interface JobStore {
     int compete(@NonNull String instance, @NonNull String group, @NonNull String name
             , @NonNull long nextTime, @NonNull long startTime);
 
+    /**
+     * Used to execute instructions.
+     */
+    int compete(
+            String instance, String group, String name
+            , long startTime
+    );
+
     @NonNull
     int finish(@NonNull String instance, @NonNull String group, @NonNull String name, @NonNull long endTime);
 

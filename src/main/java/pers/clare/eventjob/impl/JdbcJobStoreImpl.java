@@ -50,6 +50,8 @@ public class JdbcJobStoreImpl implements JobStore, InitializingBean {
 
     private static final String updateExecuting = "update event_job set status=?,prev_time=start_time,next_time=?,start_time=?,end_time=0 where `instance` = ? and `group` = ? and `name` = ? and enabled = 1 and status = ? and next_time<?";
 
+    private static final String updateExecutingByStartTime = "update event_job set prev_time=start_time,start_time=?,end_time=0 where `instance` = ? and `group` = ? and `name` = ? and start_time <> ?";
+
     private static final String updateExecuted = "update event_job set status=?,end_time=? where `instance` = ? and `group` = ? and `name` = ?";
 
     private static final String updateEnabledByGroup = "update event_job set enabled = ? where `instance` = ? and `group` = ?";
@@ -146,7 +148,7 @@ public class JdbcJobStoreImpl implements JobStore, InitializingBean {
                 return new DependentJob(
                         rs.getString(1)
                         , rs.getString(2)
-                        ,rs.getString(3)
+                        , rs.getString(3)
                         , rs.getString(4)
                 );
             }
@@ -259,6 +261,25 @@ public class JdbcJobStoreImpl implements JobStore, InitializingBean {
             connection = dataSource.getConnection();
             PreparedStatement ps = connection.prepareStatement(updateExecuting);
             setValue(ps, EventJobStatus.EXECUTING, nextTime, startTime, instance, group, name, EventJobStatus.WAITING, nextTime);
+            return ps.executeUpdate();
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
+            throw new JobException(e);
+        } finally {
+            close(connection);
+        }
+    }
+
+    @Override
+    public int compete(
+            String instance, String group, String name
+            , long startTime
+    ) {
+        Connection connection = null;
+        try {
+            connection = dataSource.getConnection();
+            PreparedStatement ps = connection.prepareStatement(updateExecutingByStartTime);
+            setValue(ps, startTime, instance, group, name, startTime);
             return ps.executeUpdate();
         } catch (Exception e) {
             log.error(e.getMessage(), e);
