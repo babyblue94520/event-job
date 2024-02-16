@@ -35,7 +35,7 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
 
     private final ConcurrentMap<String, List<JobHandler>> eventJobHandlersMap = new ConcurrentHashMap<>();
 
-    private final ConcurrentMap<String, Map<String, Map<String, String>>> afterEventJobsMap = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Map<String, Map<String, Map<String, String>>>> afterEventJobsMap = new ConcurrentHashMap<>();
 
     private final ConcurrentMap<String, String> checkMap = new ConcurrentHashMap<>();
 
@@ -53,6 +53,8 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
     private boolean ready = false;
 
     private long nextAllowReloadTime = 0;
+
+    private volatile boolean destroyed = false;
 
     public EventSchedulerImpl(@NonNull EventJobProperties eventJobProperties, @NonNull JobStore jobStore) {
         this(eventJobProperties, jobStore, null);
@@ -73,6 +75,7 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
 
     @Override
     public void destroy() {
+        destroyed = true;
         if (executor == null) return;
         log.info("Shutdown...");
         executor.shutdownNow();
@@ -281,7 +284,8 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
             afterEventJobsMap
                     .computeIfAbsent(eventJob.getAfterGroup(), (key) -> new ConcurrentHashMap<>())
                     .computeIfAbsent(eventJob.getAfterName(), (key) -> new ConcurrentHashMap<>())
-                    .put(eventJob.getGroup(), eventJob.getName())
+                    .computeIfAbsent(eventJob.getGroup(), (key) -> new ConcurrentHashMap<>())
+                    .put(eventJob.getName(), eventJob.getName());
             ;
         }
     }
@@ -294,6 +298,7 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
      * @param executeTime Execution command time. schedule job is null.
      */
     private boolean doExecute(@NonNull JobContext jobContext, Long executeTime) {
+        if (destroyed) return false;
         EventJob eventJob = jobContext.getEventJob();
         List<JobHandler> jobHandlers = getJobHandlers(eventJob.getEvent());
         if (jobHandlers.size() == 0) return true;
@@ -424,17 +429,25 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
     }
 
     private void completeJobHandler(String group, String name) {
-        Map<String, String> map = afterEventJobsMap.getOrDefault(group, Collections.emptyMap()).getOrDefault(name, Collections.emptyMap());
-        for (Iterator<Map.Entry<String, String>> it = map.entrySet().iterator(); it.hasNext(); ) {
-            Map.Entry<String, String> entry = it.next();
-            JobContext jobContext = getJobContext(entry.getKey(), entry.getValue());
-            if (jobContext == null
-                || StringUtils.hasLength(jobContext.getEventJob().getCron())
-            ) {
-                it.remove();
-                continue;
+        Map<String, Map<String, String>> map = afterEventJobsMap.getOrDefault(group, Collections.emptyMap()).getOrDefault(name, Collections.emptyMap());
+        for (Iterator<Map.Entry<String, Map<String, String>>> it = map.entrySet().iterator(); it.hasNext(); ) {
+            Map.Entry<String, Map<String, String>> entry = it.next();
+            String afterGroup = entry.getKey();
+            for (Iterator<Map.Entry<String, String>> it2 = entry.getValue().entrySet().iterator(); it2.hasNext(); ) {
+                Map.Entry<String, String> entry2 = it2.next();
+                JobContext jobContext = getJobContext(afterGroup, entry2.getKey());
+                if (jobContext == null
+                    || StringUtils.hasLength(jobContext.getEventJob().getCron())
+                ) {
+                    it2.remove();
+                    continue;
+                }
+                doExecute(jobContext);
             }
-            doExecute(jobContext);
+
+            if (entry.getValue().size() == 0) {
+                it.remove();
+            }
         }
     }
 
