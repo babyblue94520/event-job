@@ -1,6 +1,5 @@
 package pers.clare.eventjob;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
@@ -16,7 +15,6 @@ import javax.sql.DataSource;
 public class EventJobAutoConfiguration {
 
     @Bean
-    @Autowired(required = false)
     @ConditionalOnMissingBean(EventScheduler.class)
     public EventScheduler eventScheduler(
             EventJobProperties eventJobProperties
