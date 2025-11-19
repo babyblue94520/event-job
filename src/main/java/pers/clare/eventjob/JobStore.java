@@ -23,6 +23,8 @@ public interface JobStore {
 
     void update(@NonNull String instance, @NonNull EventJob job, @NonNull long nextTime) throws JobException;
 
+    void updateActive(@NonNull String instance, @NonNull EventJob job, @NonNull long activeTime) throws JobException;
+
     void delete(@NonNull String instance, @NonNull String group) throws JobException;
 
     void delete(@NonNull String instance, @NonNull String group, @NonNull String name) throws JobException;

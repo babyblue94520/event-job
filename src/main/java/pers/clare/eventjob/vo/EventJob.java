@@ -1,19 +1,18 @@
 package pers.clare.eventjob.vo;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NonNull;
+import lombok.*;
+import lombok.experimental.SuperBuilder;
 
 import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TimeZone;
 
-@SuppressWarnings("UnusedAssignment")
 @Getter
-@Builder(toBuilder = true)
+@SuperBuilder(toBuilder = true)
 @AllArgsConstructor
-public class EventJob{
+@NoArgsConstructor
+public class EventJob extends EventJobKey {
     @NonNull
     private String group;
     @NonNull
@@ -21,7 +20,8 @@ public class EventJob{
     @NonNull
     private String event;
     @NonNull
-    private String timezone;
+    @Builder.Default
+    private String timezone = TimeZone.getDefault().getID();
     @NonNull
     @Builder.Default
     private String description = "";
@@ -44,10 +44,10 @@ public class EventJob{
     @Override
     public String toString() {
         return "EventJob{" +
-                "group=\"" + group + '\"' +
-                ", name=\"" + name + '\"' +
-                ", event=\"" + event + '\"' +
-                '}';
+               "group=\"" + group + '\"' +
+               ", name=\"" + name + '\"' +
+               ", event=\"" + event + '\"' +
+               '}';
     }
 
     @Override

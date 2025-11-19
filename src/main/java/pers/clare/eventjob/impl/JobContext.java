@@ -1,42 +1,42 @@
 package pers.clare.eventjob.impl;
 
+import lombok.Getter;
+import lombok.extern.log4j.Log4j2;
 import pers.clare.eventjob.vo.EventJob;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.lang.NonNull;
 
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.atomic.AtomicLong;
 
+@Log4j2
 class JobContext {
-    private static final Logger log = LogManager.getLogger();
-    private volatile EventJob eventJob;
-    private volatile ScheduledFuture<?> scheduledFuture;
+    @Getter
+    private EventJob eventJob;
+    private ScheduledFuture<?> scheduledFuture;
+    @Getter
+    private volatile long version;
     private volatile boolean running = false;
-
-    /**
-     * waiting for check reply
-     */
-    private volatile boolean waiting = false;
-
-    JobContext(@NonNull EventJob eventJob) {
-        setEventJob(eventJob);
-    }
 
     void stop() {
         ScheduledFuture<?> future;
         synchronized (this) {
-            if ((future = this.scheduledFuture) == null) return;
+            future = this.scheduledFuture;
             this.scheduledFuture = null;
+            if (future == null) return;
         }
         try {
             future.cancel(false);
         } catch (Exception e) {
             log.warn(e.getMessage(), e);
+        } finally {
+            log.debug("Old ScheduledFuture stopped.");
         }
     }
 
     boolean isCancel() {
-        return !eventJob.getEnabled();
+        return !Boolean.TRUE.equals(eventJob.getEnabled());
     }
 
     void setScheduledFuture(ScheduledFuture<?> scheduledFuture) {
@@ -44,12 +44,11 @@ class JobContext {
         this.scheduledFuture = scheduledFuture;
     }
 
-    public EventJob getEventJob() {
-        return eventJob;
-    }
-
-    void setEventJob(@NonNull EventJob eventJob) {
+    EventJob setEventJob(@NonNull EventJob eventJob) {
+        var old = this.eventJob;
         this.eventJob = eventJob;
+        this.version = System.currentTimeMillis();
+        return old;
     }
 
     boolean isRunning() {
@@ -64,15 +63,7 @@ class JobContext {
         running = false;
     }
 
-    boolean isWaiting() {
-        return waiting;
-    }
-
-    void pause() {
-        waiting = true;
-    }
-
-    void proceed() {
-        waiting = false;
+    public boolean checkVersion(long version) {
+        return version == this.version;
     }
 }
