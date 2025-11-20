@@ -26,16 +26,4 @@ public class JobUtil {
     public static ZonedDateTime getDateTime(String timezone) {
         return timezone == null ? ZonedDateTime.now() : ZonedDateTime.now(ZoneId.of(timezone));
     }
-
-    public static void main(String[] args) {
-        String cron = "0 0 0 * * ?";
-        long nextTime, now = System.currentTimeMillis();
-
-        nextTime = getNextTime(cron, "+00:00");
-        System.out.println(nextTime + " " + (nextTime - now));
-        nextTime = getNextTime(cron, "+08:00");
-        System.out.println(nextTime + " " + (nextTime - now));
-        nextTime = getNextTime(cron, "+04:00");
-        System.out.println(nextTime + " " + (nextTime - now));
-    }
 }

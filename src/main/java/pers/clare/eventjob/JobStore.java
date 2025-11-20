@@ -1,6 +1,5 @@
 package pers.clare.eventjob;
 
-import pers.clare.eventjob.vo.DependentJob;
 import pers.clare.eventjob.vo.EventJob;
 import org.springframework.lang.NonNull;
 import pers.clare.eventjob.exception.JobException;
@@ -17,11 +16,11 @@ public interface JobStore {
 
     EventJob find(@NonNull String instance, @NonNull String group, @NonNull String name) throws JobException;
 
-    DependentJob findDependentJob(@NonNull String instance, @NonNull String group, @NonNull String name) throws JobException;
-
     void insert(@NonNull String instance, @NonNull EventJob job, @NonNull long nextTime) throws JobException;
 
     void update(@NonNull String instance, @NonNull EventJob job, @NonNull long nextTime) throws JobException;
+
+    void updateActive(@NonNull String instance, @NonNull EventJob job, @NonNull long activeTime) throws JobException;
 
     void delete(@NonNull String instance, @NonNull String group) throws JobException;
 

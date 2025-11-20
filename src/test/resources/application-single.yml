@@ -1,6 +1,10 @@
 spring:
   datasource:
-    url: jdbc:h2:tcp://localhost:9090/mem:mydb
+    url: jdbc:h2:tcp://localhost:9999/mem:mydb
     driverClassName: org.h2.Driver
     username: sa
     password: 123456
+event-job:
+  update-active-interval: PT1S
+  reload-interval: PT1S
+  thread-count: 4

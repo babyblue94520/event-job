@@ -3,16 +3,14 @@ package pers.clare.eventjob.impl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import pers.clare.eventjob.vo.DependentJob;
-import pers.clare.eventjob.vo.EventJob;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.InitializingBean;
 import pers.clare.eventjob.JobStatus;
 import pers.clare.eventjob.JobStore;
 import pers.clare.eventjob.constant.EventJobStatus;
 import pers.clare.eventjob.exception.JobException;
 import pers.clare.eventjob.util.DataSourceSchemaUtil;
+import pers.clare.eventjob.vo.EventJob;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -24,8 +22,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+@Log4j2
 public class JdbcJobStoreImpl implements JobStore, InitializingBean {
-    private static final Logger log = LogManager.getLogger();
 
     private static final TypeReference<Map<String, Object>> dataType = new TypeReference<>() {
     };
@@ -38,21 +36,21 @@ public class JdbcJobStoreImpl implements JobStore, InitializingBean {
 
     private static final String find = "select `group`,`name`,event,timezone,description,cron,after_group,after_name,enabled,`data` from event_job where `instance` = ? and `group` = ? and `name` = ?";
 
-    private static final String findStatus = "select status, next_time, enabled from event_job where `instance` = ? and `group` = ? and `name` = ?";
-
-    private static final String findDependentJob = "select cron,timezone,after_group,after_name from event_job where `instance` = ? and `group` = ? and `name` = ?";
+    private static final String findStatus = "select status, next_time, last_active_time, enabled from event_job where `instance` = ? and `group` = ? and `name` = ?";
 
     private static final String insert = "insert into event_job(`instance`,`group`,`name`,event,timezone,description,cron,after_group,after_name,next_time,enabled,`data`) values(?,?,?,?,?,?,?,?,?,?,?,?)";
 
     private static final String update = "update event_job set event=?,timezone=?,description=?,cron=?,next_time=?,enabled=?,`data`=? where `instance` = ? and `group` = ? and `name` = ?";
 
+    private static final String updateActive = "update event_job set last_active_time=? where `instance` = ? and `group` = ? and `name` = ?";
+
     private static final String updateRelease = "update event_job set status=? where `instance` = ? and `group` = ? and `name` = ? and status = ? and next_time<?";
 
-    private static final String updateExecuting = "update event_job set status=?,prev_time=start_time,next_time=?,start_time=?,end_time=0 where `instance` = ? and `group` = ? and `name` = ? and enabled = 1 and status = ? and next_time<?";
+    private static final String updateExecuting = "update event_job set status=?,prev_time=start_time,next_time=?,start_time=?,end_time=0, last_active_time=? where `instance` = ? and `group` = ? and `name` = ? and enabled = 1 and status = ? and next_time<?";
 
     private static final String updateExecutingByStartTime = "update event_job set prev_time=start_time,start_time=?,end_time=0 where `instance` = ? and `group` = ? and `name` = ? and start_time <> ?";
 
-    private static final String updateExecuted = "update event_job set status=?,end_time=? where `instance` = ? and `group` = ? and `name` = ?";
+    private static final String updateExecuted = "update event_job set status=?, end_time=? where `instance` = ? and `group` = ? and `name` = ?";
 
     private static final String updateEnabledByGroup = "update event_job set enabled = ? where `instance` = ? and `group` = ?";
 
@@ -69,7 +67,7 @@ public class JdbcJobStoreImpl implements JobStore, InitializingBean {
     }
 
     @Override
-    public void afterPropertiesSet() throws Exception {
+    public void afterPropertiesSet() {
         try {
             DataSourceSchemaUtil.init(dataSource);
         } catch (SQLException e) {
@@ -137,30 +135,6 @@ public class JdbcJobStoreImpl implements JobStore, InitializingBean {
     }
 
     @Override
-    public DependentJob findDependentJob(String instance, String group, String name) throws JobException {
-        Connection connection = null;
-        try {
-            connection = dataSource.getConnection();
-            PreparedStatement ps = connection.prepareStatement(findDependentJob);
-            setValue(ps, instance, group, name);
-            ResultSet rs = ps.executeQuery();
-            if (rs.next()) {
-                return new DependentJob(
-                        rs.getString(1)
-                        , rs.getString(2)
-                        , rs.getString(3)
-                        , rs.getString(4)
-                );
-            }
-            return null;
-        } catch (Exception e) {
-            throw new JobException(e);
-        } finally {
-            close(connection);
-        }
-    }
-
-    @Override
     public void insert(
             String instance
             , EventJob eventJob
@@ -217,6 +191,26 @@ public class JdbcJobStoreImpl implements JobStore, InitializingBean {
     }
 
     @Override
+    public void updateActive(
+            String instance
+            , EventJob eventJob
+            , long activeTime
+    ) throws JobException {
+        try {
+            executeUpdate(updateActive
+                    , activeTime
+                    , instance
+                    , eventJob.getGroup()
+                    , eventJob.getName()
+            );
+        } catch (JobException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new JobException(e);
+        }
+    }
+
+    @Override
     public void delete(String instance, String group) throws JobException {
         executeUpdate(deleteByGroup, instance, group);
     }
@@ -260,7 +254,7 @@ public class JdbcJobStoreImpl implements JobStore, InitializingBean {
         try {
             connection = dataSource.getConnection();
             PreparedStatement ps = connection.prepareStatement(updateExecuting);
-            setValue(ps, EventJobStatus.EXECUTING, nextTime, startTime, instance, group, name, EventJobStatus.WAITING, nextTime);
+            setValue(ps, EventJobStatus.EXECUTING, nextTime, startTime, startTime, instance, group, name, EventJobStatus.WAITING, nextTime);
             return ps.executeUpdate();
         } catch (Exception e) {
             log.error(e.getMessage(), e);
@@ -318,7 +312,8 @@ public class JdbcJobStoreImpl implements JobStore, InitializingBean {
                 return new JobStatus(
                         rs.getInt(1)
                         , rs.getLong(2)
-                        , rs.getBoolean(3)
+                        , rs.getLong(3)
+                        , rs.getBoolean(4)
                 );
             }
             return null;

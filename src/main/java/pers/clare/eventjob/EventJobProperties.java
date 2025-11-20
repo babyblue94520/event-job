@@ -1,10 +1,14 @@
 package pers.clare.eventjob;
 
+import lombok.Getter;
+import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 
+@Getter
+@Setter
 @Component
 @ConfigurationProperties(prefix = EventJobProperties.PREFIX)
 public class EventJobProperties {
@@ -24,35 +28,13 @@ public class EventJobProperties {
      */
     private Long checkWaitTime = 1000L;
 
-    public String getInstance() {
-        return instance;
-    }
+    /**
+     * The running job periodically updates its last active timestamp.
+     */
+    private Duration updateActiveInterval = Duration.parse("PT60S");
 
-    public void setInstance(String instance) {
-        this.instance = instance;
-    }
-
-    public Integer getThreadCount() {
-        return threadCount;
-    }
-
-    public void setThreadCount(Integer threadCount) {
-        this.threadCount = threadCount;
-    }
-
-    public Duration getReloadInterval() {
-        return reloadInterval;
-    }
-
-    public void setReloadInterval(Duration reloadInterval) {
-        this.reloadInterval = reloadInterval;
-    }
-
-    public Long getCheckWaitTime() {
-        return checkWaitTime;
-    }
-
-    public void setCheckWaitTime(Long checkWaitTime) {
-        this.checkWaitTime = checkWaitTime;
-    }
+    /**
+     *  If true, aborts the task on exception; if false, exceptions are caught and execution continues.
+     */
+    private Boolean abortOnError = true;
 }
