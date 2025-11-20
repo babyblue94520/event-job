@@ -33,4 +33,8 @@ public class EventJobProperties {
      */
     private Duration updateActiveInterval = Duration.parse("PT60S");
 
+    /**
+     *  If true, aborts the task on exception; if false, exceptions are caught and execution continues.
+     */
+    private Boolean abortOnError = true;
 }

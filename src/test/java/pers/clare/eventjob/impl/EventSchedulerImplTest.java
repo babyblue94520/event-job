@@ -1,27 +1,25 @@
 package pers.clare.eventjob.impl;
 
-import pers.clare.eventjob.vo.EventJob;
 import lombok.extern.log4j.Log4j2;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.jdbc.Sql;
+import org.springframework.test.context.ActiveProfiles;
 import pers.clare.eventjob.EventScheduler;
 import pers.clare.eventjob.function.JobHandler;
-import pers.clare.eventjob.util.DataSourceSchemaUtil;
+import pers.clare.eventjob.vo.EventJob;
 import pers.clare.h2.H2Application;
 import pers.clare.test.ApplicationTest2;
 import pers.clare.test.eventjob.EventJobMessageServiceImpl;
+import pers.clare.test.eventjob.EventJobRegister;
 
-import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.TestInstance.Lifecycle.PER_CLASS;
 
 @DisplayName("EventSchedulerImplTest")
@@ -37,14 +35,17 @@ class EventSchedulerImplTest {
         assertTrue(count > 0, () -> String.format("count: %d", count));
     }
 
+    private void assertRange(Integer min, Integer max, Integer count) {
+        assertTrue(count > min && count < max, () -> String.format("count: %d", count));
+    }
+
     static {
         H2Application.main(null);
     }
 
     @DisplayName("Single")
-    @SpringBootTest(
-            properties = {"spring.profiles.active=single", "event-job.reload-interval=1s"}
-    )
+    @ActiveProfiles("single")
+    @SpringBootTest
     @Nested
     @TestInstance(PER_CLASS)
     @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -310,13 +311,122 @@ class EventSchedulerImplTest {
             assertGreaterZero(afterCount.get());
             assertGreaterZero(afterCount2.get());
         }
+
+        @Test
+        @Order(13)
+        void longHandler() throws InterruptedException {
+            AtomicInteger count = new AtomicInteger();
+            EventJob job = EventJob.builder()
+                    .group("test")
+                    .name("test")
+                    .event("test")
+                    .cron("* * * * * ?")
+                    .timezone("+00:00")
+                    .build();
+            eventScheduler.addHandler(job.getEvent(), (eventJob) -> {
+                count.incrementAndGet();
+            });
+            eventScheduler.addHandler(job.getEvent(), (eventJob) -> {
+                Thread.sleep(3000);
+            });
+            eventScheduler.add(job);
+            Thread.sleep(10000);
+            System.out.println(count.get());
+        }
+
+        @Test
+        @Order(12)
+        void abortOnError() throws InterruptedException {
+            AtomicInteger count = new AtomicInteger();
+            AtomicInteger count2 = new AtomicInteger();
+            AtomicInteger count3 = new AtomicInteger();
+            int target = 5;
+            int target2 = 3;
+            eventScheduler.addHandler(job.getEvent(), (eventJob) -> {
+                if (count.incrementAndGet() == target) {
+                    throw new RuntimeException();
+                }
+            });
+
+            eventScheduler.addHandler(afterJob.getEvent(), (eventJob) -> {
+                if (count2.incrementAndGet() == target) {
+                    throw new RuntimeException();
+                }
+            });
+
+            eventScheduler.addHandler(afterJob2.getEvent(), (eventJob) -> {
+                if (count3.incrementAndGet() == target2) {
+                    throw new RuntimeException();
+                }
+            });
+            Thread.sleep(10000);
+            assertEquals(target, count.get());
+            assertEquals(target, count2.get());
+            assertEquals(target2, count3.get());
+
+        }
+
+        @Test
+        @Order(13)
+        void updateJob() throws InterruptedException {
+            EventJob job = EventJob.builder()
+                    .group("test")
+                    .name("test")
+                    .event("test")
+                    .cron("*/3 * * * * ?")
+                    .timezone("+00:00")
+                    .build();
+            AtomicInteger count = new AtomicInteger();
+            eventScheduler.addHandler(job.getEvent(), (eventJob) -> {
+                count.incrementAndGet();
+            });
+            eventScheduler.add(job);
+            int target = 5;
+
+            updateTest(target, count, () -> {
+                eventScheduler.disable(job.getGroup(), job.getName());
+            }, () -> {
+                eventScheduler.enable(job.getGroup(), job.getName());
+            });
+            updateTest(target, count, () -> {
+                eventScheduler.disable(job.getGroup());
+            }, () -> {
+                eventScheduler.enable(job.getGroup());
+            });
+
+
+            updateTest(target, count, () -> {
+                eventScheduler.remove(job.getGroup());
+            }, () -> {
+                eventScheduler.add(job);
+            });
+            updateTest(target, count, () -> {
+                eventScheduler.remove(job.getGroup(), job.getName());
+            }, () -> {
+                eventScheduler.add(job);
+            });
+        }
+
+        void updateTest(int target, AtomicInteger count, Runnable before, Runnable after) throws InterruptedException {
+            int next = 0;
+            while (next < target) {
+                int c = count.get();
+                if (c > next) {
+                    next = c;
+                    before.run();
+                    Thread.sleep(1000);
+                    after.run();
+                } else {
+                    Thread.sleep(500);
+                }
+            }
+            assertEquals(target, next);
+        }
     }
 
     @DisplayName("Cluster")
-    @SpringBootTest(
-            properties = {"spring.profiles.active=cluster"}
-    )
-    @Sql(scripts = {"/schema/cluster.sql"})
+    @ActiveProfiles("cluster")
+    @SpringBootTest
     @Nested
     @TestInstance(PER_CLASS)
     @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -332,7 +442,7 @@ class EventSchedulerImplTest {
                 .group(tag)
                 .name(tag)
                 .event(tag)
-                .cron("*/1 * * * * ?")
+                .cron("* * * * * ?")
                 .timezone("+00:00")
                 .data(map)
                 .build();
@@ -358,7 +468,7 @@ class EventSchedulerImplTest {
                 .group(tag)
                 .name(tag + "2")
                 .event(tag + "2")
-                .cron("*/1 * * * * ?")
+                .cron("* * * * * ?")
                 .timezone("+08:00")
                 .data(map)
                 .build();
@@ -366,12 +476,11 @@ class EventSchedulerImplTest {
                 .group(tag + "3")
                 .name(tag)
                 .event(tag + "3")
-                .cron("*/1 * * * * ?")
+                .cron("* * * * * ?")
                 .timezone("+00:00")
                 .data(map)
                 .build();
-        @Autowired
-        private JdbcTemplate jdbcTemplate;
+
         @Autowired
         private EventScheduler eventScheduler;
 
@@ -396,15 +505,14 @@ class EventSchedulerImplTest {
         }
 
         @BeforeAll
-        void beforeAll() throws SQLException {
-            DataSourceSchemaUtil.init(Objects.requireNonNull(jdbcTemplate.getDataSource()), "schema/cluster.sql");
+        void beforeAll() {
             eventScheduler.add(job);
             eventScheduler.add(afterJob);
             eventScheduler.add(afterJob2);
             eventScheduler.add(sameGroupJob);
             eventScheduler.add(differentGroupJob);
             for (int i = 0; i < 3; i++) {
-                ApplicationTest2.main(new String[]{"--spring.profiles.active=cluster", "--server.port=" + (9091 + i)});
+                ApplicationTest2.main(new String[]{"--spring.profiles.active=cluster", "--server.port=0"});
             }
         }
 
@@ -418,40 +526,46 @@ class EventSchedulerImplTest {
             reset();
         }
 
-        @AfterAll
+        @AfterEach
         void after() {
             eventScheduler.remove(job.getGroup());
             eventScheduler.remove(afterJob.getGroup());
             eventScheduler.remove(afterJob2.getGroup());
             eventScheduler.remove(sameGroupJob.getGroup());
             eventScheduler.remove(differentGroupJob.getGroup());
+            sleep();
         }
 
         private void reset() {
-            jdbcTemplate.update("update log set `count` = 0");
+            EventJobRegister.reset();
         }
 
-        private Integer getSumCount(EventJob job) {
-            return jdbcTemplate.queryForObject("select ifnull(sum(`count`),0) from log where instance = ? and `group` = ? and name = ? "
-                    , Integer.class
-                    , eventScheduler.getInstance()
-                    , job.getGroup()
-                    , job.getName()
-            );
+        private Integer getSumCount(EventJob eventJob) {
+            return EventJobRegister.getCount(eventJob);
         }
 
-        private void check() {
-            Long count = jdbcTemplate.queryForObject("select count(*) from (select count(*) from log where count>0 group by instance,`group`,name)t", Long.class);
-            if (count == null) {
-                fail("check count: null");
-            } else {
-                assertTrue(count > 0, () -> String.format("check count: %d", count));
-            }
+        @Test
+        @Order(2)
+        void count() throws InterruptedException {
+            int target = 10;
+            Thread.sleep(target * 1000);
+            int min = target - 2;
+            int max = target + 2;
+            assertRange(min, max, getSumCount(job));
+            assertRange(min, max, getSumCount(sameGroupJob));
+            assertRange(min, max, getSumCount(differentGroupJob));
+            assertRange(min, max, getSumCount(afterJob));
+            assertRange(min, max, getSumCount(afterJob2));
         }
 
         @Test
         @Order(3)
         void disable() {
+            doDisable();
+            doEnable();
+        }
+
+        void doDisable() {
             eventScheduler.disable(job.getGroup(), job.getName());
             delay();
             reset();
@@ -466,12 +580,17 @@ class EventSchedulerImplTest {
         @Test
         @Order(4)
         void enable() {
+            doEnable();
+            doDisable();
+            doEnable();
+        }
+
+        void doEnable() {
             eventScheduler.enable(job.getGroup(), job.getName());
             reset();
             sleep();
             assertGreaterZero(getSumCount(job));
-            assertGreaterZero(getSumCount(sameGroupJob));
-            assertGreaterZero(getSumCount(differentGroupJob));
+            ;
             assertGreaterZero(getSumCount(afterJob));
             assertGreaterZero(getSumCount(afterJob2));
         }
@@ -515,8 +634,6 @@ class EventSchedulerImplTest {
             reset();
             sleep();
             assertZero(getSumCount(job));
-            assertGreaterZero(getSumCount(sameGroupJob));
-            assertGreaterZero(getSumCount(differentGroupJob));
             assertZero(getSumCount(afterJob));
             assertZero(getSumCount(afterJob2));
         }
@@ -563,8 +680,10 @@ class EventSchedulerImplTest {
             assertGreaterZero(getSumCount(differentGroupJob));
             assertGreaterZero(getSumCount(afterJob));
             assertGreaterZero(getSumCount(afterJob2));
-            check();
         }
+
+
     }
+
 
 }

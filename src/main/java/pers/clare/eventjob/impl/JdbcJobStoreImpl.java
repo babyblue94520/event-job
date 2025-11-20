@@ -3,16 +3,14 @@ package pers.clare.eventjob.impl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import pers.clare.eventjob.vo.DependentJob;
-import pers.clare.eventjob.vo.EventJob;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.InitializingBean;
 import pers.clare.eventjob.JobStatus;
 import pers.clare.eventjob.JobStore;
 import pers.clare.eventjob.constant.EventJobStatus;
 import pers.clare.eventjob.exception.JobException;
 import pers.clare.eventjob.util.DataSourceSchemaUtil;
+import pers.clare.eventjob.vo.EventJob;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -24,8 +22,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+@Log4j2
 public class JdbcJobStoreImpl implements JobStore, InitializingBean {
-    private static final Logger log = LogManager.getLogger();
 
     private static final TypeReference<Map<String, Object>> dataType = new TypeReference<>() {
     };
@@ -39,8 +37,6 @@ public class JdbcJobStoreImpl implements JobStore, InitializingBean {
     private static final String find = "select `group`,`name`,event,timezone,description,cron,after_group,after_name,enabled,`data` from event_job where `instance` = ? and `group` = ? and `name` = ?";
 
     private static final String findStatus = "select status, next_time, last_active_time, enabled from event_job where `instance` = ? and `group` = ? and `name` = ?";
-
-    private static final String findDependentJob = "select cron,timezone,after_group,after_name from event_job where `instance` = ? and `group` = ? and `name` = ?";
 
     private static final String insert = "insert into event_job(`instance`,`group`,`name`,event,timezone,description,cron,after_group,after_name,next_time,enabled,`data`) values(?,?,?,?,?,?,?,?,?,?,?,?)";
 
@@ -131,30 +127,6 @@ public class JdbcJobStoreImpl implements JobStore, InitializingBean {
             setValue(ps, instance, group, name);
             ResultSet rs = ps.executeQuery();
             return rs.next() ? to(rs) : null;
-        } catch (Exception e) {
-            throw new JobException(e);
-        } finally {
-            close(connection);
-        }
-    }
-
-    @Override
-    public DependentJob findDependentJob(String instance, String group, String name) throws JobException {
-        Connection connection = null;
-        try {
-            connection = dataSource.getConnection();
-            PreparedStatement ps = connection.prepareStatement(findDependentJob);
-            setValue(ps, instance, group, name);
-            ResultSet rs = ps.executeQuery();
-            if (rs.next()) {
-                return new DependentJob(
-                        rs.getString(1)
-                        , rs.getString(2)
-                        , rs.getString(3)
-                        , rs.getString(4)
-                );
-            }
-            return null;
         } catch (Exception e) {
             throw new JobException(e);
         } finally {

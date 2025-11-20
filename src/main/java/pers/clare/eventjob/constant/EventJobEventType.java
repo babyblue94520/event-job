@@ -1,7 +1,10 @@
 package pers.clare.eventjob.constant;
 
-public interface EventJobEventType {
-    String CHANGE = "change";
-    String EXECUTE = "execute";
-    String COMPLETE = "complete";
+import lombok.experimental.UtilityClass;
+
+@UtilityClass
+public class EventJobEventType {
+    public static final String CHANGE = "change";
+    public static final String EXECUTE = "execute";
+    public static final String COMPLETE = "complete";
 }

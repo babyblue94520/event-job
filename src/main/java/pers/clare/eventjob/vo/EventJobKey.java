@@ -10,21 +10,21 @@ import java.util.Objects;
 @NoArgsConstructor
 @SuperBuilder(toBuilder = true)
 public class EventJobKey {
-    @NonNull
     private String group;
-    @NonNull
     private String name;
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
+    public final boolean equals(Object o) {
         if (!(o instanceof EventJobKey)) return false;
-        EventJobKey eventJob = (EventJobKey) o;
-        return Objects.equals(group, eventJob.group) && Objects.equals(name, eventJob.name);
+
+        EventJobKey that = (EventJobKey) o;
+        return Objects.equals(getGroup(), that.getGroup()) && Objects.equals(getName(), that.getName());
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(group, name);
+        int result = Objects.hashCode(getGroup());
+        result = 31 * result + Objects.hashCode(getName());
+        return result;
     }
 }

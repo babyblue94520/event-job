@@ -36,7 +36,7 @@ class JobContext {
     }
 
     boolean isCancel() {
-        return !Boolean.TRUE.equals(eventJob.getEnabled());
+        return !eventJob.getEnabled();
     }
 
     void setScheduledFuture(ScheduledFuture<?> scheduledFuture) {
@@ -44,11 +44,8 @@ class JobContext {
         this.scheduledFuture = scheduledFuture;
     }
 
-    EventJob setEventJob(@NonNull EventJob eventJob) {
-        var old = this.eventJob;
+    void setEventJob(@NonNull EventJob eventJob) {
         this.eventJob = eventJob;
-        this.version = System.currentTimeMillis();
-        return old;
     }
 
     boolean isRunning() {
@@ -61,6 +58,11 @@ class JobContext {
 
     void end() {
         running = false;
+    }
+
+    public void nextVersion() {
+
+        this.version = System.currentTimeMillis();
     }
 
     public boolean checkVersion(long version) {

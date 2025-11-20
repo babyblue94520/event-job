@@ -5,7 +5,6 @@ import lombok.experimental.SuperBuilder;
 
 import java.util.Collections;
 import java.util.Map;
-import java.util.Objects;
 import java.util.TimeZone;
 
 @Getter
@@ -48,18 +47,5 @@ public class EventJob extends EventJobKey {
                ", name=\"" + name + '\"' +
                ", event=\"" + event + '\"' +
                '}';
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof EventJob)) return false;
-        EventJob eventJob = (EventJob) o;
-        return Objects.equals(group, eventJob.group) && Objects.equals(name, eventJob.name);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(group, name);
     }
 }
