@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicLong;
 class JobContext {
     @Getter
     private EventJob eventJob;
+    @Getter
     private ScheduledFuture<?> scheduledFuture;
     @Getter
     private volatile long version;
@@ -31,7 +32,7 @@ class JobContext {
         } catch (Exception e) {
             log.warn(e.getMessage(), e);
         } finally {
-            log.debug("Old ScheduledFuture stopped.");
+            log.info("Old ScheduledFuture stopped.");
         }
     }
 
@@ -40,7 +41,7 @@ class JobContext {
     }
 
     void setScheduledFuture(ScheduledFuture<?> scheduledFuture) {
-        stop();
+//        stop();
         this.scheduledFuture = scheduledFuture;
     }
 

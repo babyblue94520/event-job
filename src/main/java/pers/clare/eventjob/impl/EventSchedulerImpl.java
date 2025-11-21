@@ -14,6 +14,7 @@ import pers.clare.eventjob.constant.EventJobStatus;
 import pers.clare.eventjob.exception.JobException;
 import pers.clare.eventjob.function.JobHandler;
 import pers.clare.eventjob.util.JobUtil;
+import pers.clare.eventjob.vo.ClosureRef;
 import pers.clare.eventjob.vo.EventJob;
 import pers.clare.eventjob.vo.EventJobKey;
 
@@ -36,6 +37,8 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
     private final ConcurrentMap<String, List<JobHandler>> eventJobHandlersMap = new ConcurrentHashMap<>();
 
     private final ConcurrentMap<EventJobKey, Map<EventJobKey, EventJobKey>> afterEventJobsMap = new ConcurrentHashMap<>();
+
+    private final ConcurrentMap<EventJobKey, Future<?>> futureMap = new ConcurrentHashMap<>();
 
     private final AtomicInteger executingCount = new AtomicInteger();
 
@@ -315,17 +318,28 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
         EventJob eventJob = jobContext.getEventJob();
         long version = jobContext.getVersion();
         long delay = JobUtil.getNextDelay(eventJob.getCron(), eventJob.getTimezone());
-        ScheduledFuture<?> scheduledFuture = executor.schedule(() -> {
+        Set<ScheduledFuture<?>> futures = new HashSet<>();
+        ClosureRef<ScheduledFuture<?>> selfFuture = new ClosureRef<>();
+        var future = executor.schedule(() -> {
             if (destroyed) return;
             JobContext context = jobContextMap.get(eventJob);
             if (context == null) return;
             if (context.isCancel()) return;
             if (!context.checkVersion(version)) return;
+            if (!Objects.equals(selfFuture.getValue(), context.getScheduledFuture())) {
+                log.info("Skip old scheduled.");
+                return;
+            }
             if (doExecute(context)) {
+                if (!Objects.equals(selfFuture.getValue(), context.getScheduledFuture())) {
+                    log.info("Skip add schedule job.");
+                    return;
+                }
                 addSchedule(context);
             }
         }, delay, TimeUnit.MILLISECONDS);
-        jobContext.setScheduledFuture(scheduledFuture);
+        selfFuture.setValue(future);
+        jobContext.setScheduledFuture(future);
     }
 
     private boolean doExecute(JobContext jobContext) {

@@ -108,23 +108,23 @@ class EventSchedulerImplTest {
         private final AtomicInteger differentGroupCount = new AtomicInteger();
         private final JobHandler jobHandler = (eventJob) -> {
             count.incrementAndGet();
-            log.info(eventJob);
+//            log.info(eventJob);
         };
         private final JobHandler afterJobHandler = (eventJob) -> {
             afterCount.incrementAndGet();
-            log.info(eventJob);
+//            log.info(eventJob);
         };
         private final JobHandler afterJobHandler2 = (eventJob) -> {
             afterCount2.incrementAndGet();
-            log.info(eventJob);
+//            log.info(eventJob);
         };
         private final JobHandler sameGroupHandler = (eventJob) -> {
             sameGroupCount.incrementAndGet();
-            log.info(eventJob);
+//            log.info(eventJob);
         };
         private final JobHandler differentHandler = (eventJob) -> {
             differentGroupCount.incrementAndGet();
-            log.info(eventJob);
+//            log.info(eventJob);
         };
         @Autowired
         private EventScheduler eventScheduler;
@@ -388,12 +388,12 @@ class EventSchedulerImplTest {
             }, () -> {
                 eventScheduler.enable(job.getGroup(), job.getName());
             });
+
             updateTest(target, count, () -> {
                 eventScheduler.disable(job.getGroup());
             }, () -> {
                 eventScheduler.enable(job.getGroup());
             });
-
 
             updateTest(target, count, () -> {
                 eventScheduler.remove(job.getGroup());
