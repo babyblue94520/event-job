@@ -19,6 +19,7 @@ import pers.clare.eventjob.vo.EventJob;
 import pers.clare.eventjob.vo.EventJobKey;
 
 import java.lang.management.ManagementFactory;
+import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -36,7 +37,7 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
 
     private final ConcurrentMap<String, List<JobHandler>> eventJobHandlersMap = new ConcurrentHashMap<>();
 
-    private final ConcurrentMap<EventJobKey, Map<EventJobKey, EventJobKey>> afterEventJobsMap = new ConcurrentHashMap<>();
+    private final ConcurrentMap<EventJobKey, ConcurrentMap<EventJobKey, EventJobKey>> afterEventJobsMap = new ConcurrentHashMap<>();
 
     private final ConcurrentMap<EventJobKey, Future<?>> futureMap = new ConcurrentHashMap<>();
 
@@ -49,10 +50,6 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
     private final EventJobMessageService eventJobMessageService;
 
     private ScheduledExecutorService executor;
-
-    private boolean ready = false;
-
-    private long nextAllowReloadTime = 0;
 
     private volatile boolean destroyed = false;
 
@@ -87,7 +84,6 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
         executor = Executors.newScheduledThreadPool(properties.getThreadCount(), new CustomizableThreadFactory("event-job-"));
         executor.scheduleAtFixedRate(this::reload, 0, properties.getReloadInterval().toMillis(), TimeUnit.MILLISECONDS);
         executor.scheduleAtFixedRate(this::updateActiveTime, properties.getUpdateActiveInterval().toMillis(), properties.getUpdateActiveInterval().toMillis(), TimeUnit.MILLISECONDS);
-        ready = true;
     }
 
     /**
@@ -125,26 +121,37 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
         return jobStore.find(getInstance(), group, name);
     }
 
-    public void add(EventJob job) {
-        if (job == null) return;
-        String group = job.getGroup();
-        String name = job.getName();
+    public void add(EventJob eventJob) {
+        if (eventJob == null) return;
+        String group = eventJob.getGroup();
+        String name = eventJob.getName();
         long nextTime = 0L;
-        if (StringUtils.hasLength(job.getCron())) {
-            nextTime = JobUtil.getNextTime(job.getCron(), job.getTimezone());
+        if (StringUtils.hasLength(eventJob.getCron())) {
+            nextTime = JobUtil.getNextTime(eventJob.getCron(), eventJob.getTimezone());
         }
-        EventJob eventJob = jobStore.find(getInstance(), group, name);
-        if (eventJob == null) {
-            jobStore.insert(getInstance(), job, nextTime);
-        } else if (equals(job, eventJob)) {
-            jobStore.update(getInstance(), job, nextTime);
+        EventJob oldJob = jobStore.find(getInstance(), group, name);
+        if (oldJob == null) {
+            try {
+                jobStore.insert(getInstance(), eventJob, nextTime);
+            } catch (JobException e) {
+                try {
+                    // retry update
+                    jobStore.update(getInstance(), eventJob, nextTime);
+                } catch (JobException ex) {
+                    throw e;
+                }
+            }
+        } else if (equals(eventJob, oldJob)) {
+            jobStore.update(getInstance(), eventJob, nextTime);
         } else {
             return;
         }
         eventJob = jobStore.find(getInstance(), group, name);
+        if (eventJob == null) return;
         reload(eventJob);
         notifyChange(group, name);
     }
+
 
     /**
      * remove job
@@ -236,26 +243,28 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
     }
 
     private void clear(EventJobKey eventJobKey) {
+        log.debug("clearing eventJobKey {}", eventJobKey);
         JobContext jobContext = jobContextMap.remove(eventJobKey);
         if (jobContext != null) {
             jobContext.stop();
         }
-        for (Map<EventJobKey, EventJobKey> value : afterEventJobsMap.values()) {
-            value.remove(eventJobKey);
+        for (EventJobKey jobKey : afterEventJobsMap.keySet()) {
+            afterEventJobsMap.compute(jobKey, (key, inner) -> {
+                if (inner == null) return null;
+                inner.remove(eventJobKey);
+                return inner.isEmpty() ? null : inner;
+            });
         }
     }
 
     private void reload() {
-        if (!ready) return;
-        long nowTime = System.currentTimeMillis();
-        if (nowTime < nextAllowReloadTime) return;
-        nextAllowReloadTime = nowTime + properties.getReloadInterval().toMillis();
+        log.debug("reloading jobs");
         try {
             List<EventJob> eventJobs = jobStore.findAll(getInstance());
-            clearNotExists(eventJobs);
             for (EventJob eventJob : eventJobs) {
                 reload(eventJob);
             }
+            clearNotExists(eventJobs);
         } catch (Exception e) {
             log.error(e.getMessage(), e);
         }
@@ -278,26 +287,33 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
     }
 
     private void reload(EventJob eventJob) {
-        if (!ready) return;
         var jobContext = jobContextMap
                 .computeIfAbsent(eventJob, key -> new JobContext());
 
         jobContext.setEventJob(eventJob);
 
-        if (StringUtils.hasLength(eventJob.getCron()) && eventJob.getEnabled()) {
-            jobContext.nextVersion();
-            addSchedule(jobContext);
+        if (eventJob.getEnabled()
+            && StringUtils.hasLength(eventJob.getCron())
+        ) {
+            if (jobContext.updateCron()) {
+                addSchedule(jobContext);
+            }
         } else {
             jobContext.stop();
         }
+
         String afterGroup = eventJob.getAfterGroup();
         String afterName = eventJob.getAfterName();
-
-        if (afterGroup.isEmpty() || afterName.isEmpty()) return;
-        afterEventJobsMap
-                .computeIfAbsent(new EventJobKey(afterGroup, afterName), key -> new ConcurrentHashMap<>())
-                .put(eventJob, eventJob)
-        ;
+        if (StringUtils.hasLength(afterGroup)
+            && StringUtils.hasLength(afterName)
+        ) {
+            var eventJobKey = new EventJobKey(afterGroup, afterName);
+            afterEventJobsMap.compute(eventJobKey, (key, inner) -> {
+                if (inner == null) inner = new ConcurrentHashMap<>();
+                inner.put(eventJob, eventJob);
+                return inner;
+            });
+        }
     }
 
     private void updateActiveTime() {
@@ -315,31 +331,28 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
     private void addSchedule(JobContext jobContext) {
         if (executor == null || executor.isShutdown() || executor.isTerminated()) return;
         if (jobContext.isCancel()) return;
-        EventJob eventJob = jobContext.getEventJob();
-        long version = jobContext.getVersion();
-        long delay = JobUtil.getNextDelay(eventJob.getCron(), eventJob.getTimezone());
+        long delay = JobUtil.getNextDelay(jobContext.getCron(), jobContext.getTimezone());
         Set<ScheduledFuture<?>> futures = new HashSet<>();
-        ClosureRef<ScheduledFuture<?>> selfFuture = new ClosureRef<>();
+        ClosureRef<ScheduledFuture<?>> currentFuture = new ClosureRef<>();
         var future = executor.schedule(() -> {
             if (destroyed) return;
-            JobContext context = jobContextMap.get(eventJob);
-            if (context == null) return;
+            JobContext context = jobContextMap.get(jobContext.getEventJob());
+            if (context != jobContext) return;
             if (context.isCancel()) return;
-            if (!context.checkVersion(version)) return;
-            if (!Objects.equals(selfFuture.getValue(), context.getScheduledFuture())) {
-                log.info("Skip old scheduled.");
+            if (!Objects.equals(context.getFuture(), currentFuture.getValue())) {
+                log.debug("Skip task execution.");
                 return;
             }
             if (doExecute(context)) {
-                if (!Objects.equals(selfFuture.getValue(), context.getScheduledFuture())) {
-                    log.info("Skip add schedule job.");
+                if (!Objects.equals(currentFuture.getValue(), context.getFuture())) {
+                    log.debug("Skip next task.");
                     return;
                 }
                 addSchedule(context);
             }
         }, delay, TimeUnit.MILLISECONDS);
-        selfFuture.setValue(future);
-        jobContext.setScheduledFuture(future);
+        currentFuture.setValue(future);
+        jobContext.setFuture(future);
     }
 
     private boolean doExecute(JobContext jobContext) {
@@ -415,8 +428,12 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
     private long getNextTime(EventJob eventJob) {
         if (StringUtils.hasLength(eventJob.getCron())) {
             return JobUtil.getNextTime(eventJob.getCron(), eventJob.getTimezone());
-        } else if (StringUtils.hasLength(eventJob.getAfterGroup())) {
-            JobContext jobContext = jobContextMap.get(new EventJobKey(eventJob.getAfterGroup(), eventJob.getAfterName()));
+        } else if (
+                StringUtils.hasLength(eventJob.getAfterGroup())
+                && StringUtils.hasLength(eventJob.getAfterName())
+        ) {
+            var key = new EventJobKey(eventJob.getAfterGroup(), eventJob.getAfterName());
+            JobContext jobContext = jobContextMap.get(key);
             if (jobContext == null) return 0L;
             return getNextTime(jobContext.getEventJob());
         }
@@ -447,7 +464,8 @@ public class EventSchedulerImpl implements EventScheduler, InitializingBean, Dis
     }
 
     private void completeJobHandler(EventJobKey key) {
-        Map<EventJobKey, EventJobKey> map = afterEventJobsMap.getOrDefault(key, Collections.emptyMap());
+        Map<EventJobKey, EventJobKey> map = afterEventJobsMap.get(key);
+        if (map == null) return;
         for (EventJobKey value : map.values()) {
             JobContext jobContext = jobContextMap.get(value);
             if (jobContext == null) {

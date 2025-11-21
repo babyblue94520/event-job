@@ -9,30 +9,30 @@ import java.util.List;
 @SuppressWarnings("UnusedReturnValue")
 public interface JobStore {
     @NonNull
-    List<EventJob> findAll(String instance) throws JobException;
+    List<EventJob> findAll(String instance);
 
     @NonNull
-    List<EventJob> findAll(String instance, String group) throws JobException;
+    List<EventJob> findAll(String instance, String group);
 
-    EventJob find(@NonNull String instance, @NonNull String group, @NonNull String name) throws JobException;
+    EventJob find(@NonNull String instance, @NonNull String group, @NonNull String name);
 
-    void insert(@NonNull String instance, @NonNull EventJob job, @NonNull long nextTime) throws JobException;
+    void insert(@NonNull String instance, @NonNull EventJob job, @NonNull long nextTime);
 
-    void update(@NonNull String instance, @NonNull EventJob job, @NonNull long nextTime) throws JobException;
+    void update(@NonNull String instance, @NonNull EventJob job, @NonNull long nextTime);
 
-    void updateActive(@NonNull String instance, @NonNull EventJob job, @NonNull long activeTime) throws JobException;
+    void updateActive(@NonNull String instance, @NonNull EventJob job, @NonNull long activeTime);
 
-    void delete(@NonNull String instance, @NonNull String group) throws JobException;
+    void delete(@NonNull String instance, @NonNull String group);
 
-    void delete(@NonNull String instance, @NonNull String group, @NonNull String name) throws JobException;
+    void delete(@NonNull String instance, @NonNull String group, @NonNull String name);
 
-    void enable(@NonNull String instance, @NonNull String group) throws JobException;
+    void enable(@NonNull String instance, @NonNull String group);
 
-    void enable(@NonNull String instance, @NonNull String group, @NonNull String name) throws JobException;
+    void enable(@NonNull String instance, @NonNull String group, @NonNull String name);
 
-    void disable(@NonNull String instance, @NonNull String group) throws JobException;
+    void disable(@NonNull String instance, @NonNull String group);
 
-    void disable(@NonNull String instance, @NonNull String group, @NonNull String name) throws JobException;
+    void disable(@NonNull String instance, @NonNull String group, @NonNull String name);
 
     JobStatus getStatus(@NonNull String instance, @NonNull String group, @NonNull String name);
 

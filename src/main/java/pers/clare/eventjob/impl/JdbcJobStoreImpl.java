@@ -76,7 +76,7 @@ public class JdbcJobStoreImpl implements JobStore, InitializingBean {
     }
 
     @Override
-    public List<EventJob> findAll(String instance) throws JobException {
+    public List<EventJob> findAll(String instance) {
         if (instance == null) return Collections.emptyList();
         List<EventJob> result = new ArrayList<>();
         Connection connection = null;
@@ -97,7 +97,7 @@ public class JdbcJobStoreImpl implements JobStore, InitializingBean {
     }
 
     @Override
-    public List<EventJob> findAll(String instance, String group) throws JobException {
+    public List<EventJob> findAll(String instance, String group) {
         if (instance == null || group == null) return Collections.emptyList();
         List<EventJob> result = new ArrayList<>();
         Connection connection = null;
@@ -119,7 +119,7 @@ public class JdbcJobStoreImpl implements JobStore, InitializingBean {
     }
 
     @Override
-    public EventJob find(String instance, String group, String name) throws JobException {
+    public EventJob find(String instance, String group, String name) {
         Connection connection = null;
         try {
             connection = dataSource.getConnection();
@@ -135,27 +135,10 @@ public class JdbcJobStoreImpl implements JobStore, InitializingBean {
     }
 
     @Override
-    public void insert(
-            String instance
-            , EventJob eventJob
-            , long nextTime
-    ) throws JobException {
+    public void insert(String instance, EventJob eventJob, long nextTime) {
         try {
             String data = om.writeValueAsString(eventJob.getData());
-            executeUpdate(insert
-                    , instance
-                    , eventJob.getGroup()
-                    , eventJob.getName()
-                    , eventJob.getEvent()
-                    , eventJob.getTimezone()
-                    , eventJob.getDescription()
-                    , eventJob.getCron()
-                    , eventJob.getAfterGroup()
-                    , eventJob.getAfterName()
-                    , nextTime
-                    , eventJob.getEnabled()
-                    , data
-            );
+            executeUpdate(insert, instance, eventJob.getGroup(), eventJob.getName(), eventJob.getEvent(), eventJob.getTimezone(), eventJob.getDescription(), eventJob.getCron(), eventJob.getAfterGroup(), eventJob.getAfterName(), nextTime, eventJob.getEnabled(), data);
         } catch (JobException e) {
             throw e;
         } catch (Exception e) {
@@ -164,25 +147,10 @@ public class JdbcJobStoreImpl implements JobStore, InitializingBean {
     }
 
     @Override
-    public void update(
-            String instance
-            , EventJob eventJob
-            , long nextTime
-    ) throws JobException {
+    public void update(String instance, EventJob eventJob, long nextTime) {
         try {
             String data = om.writeValueAsString(eventJob.getData());
-            executeUpdate(update
-                    , eventJob.getEvent()
-                    , eventJob.getTimezone()
-                    , eventJob.getDescription()
-                    , eventJob.getCron()
-                    , nextTime
-                    , eventJob.getEnabled()
-                    , data
-                    , instance
-                    , eventJob.getGroup()
-                    , eventJob.getName()
-            );
+            executeUpdate(update, eventJob.getEvent(), eventJob.getTimezone(), eventJob.getDescription(), eventJob.getCron(), nextTime, eventJob.getEnabled(), data, instance, eventJob.getGroup(), eventJob.getName());
         } catch (JobException e) {
             throw e;
         } catch (Exception e) {
@@ -191,18 +159,9 @@ public class JdbcJobStoreImpl implements JobStore, InitializingBean {
     }
 
     @Override
-    public void updateActive(
-            String instance
-            , EventJob eventJob
-            , long activeTime
-    ) throws JobException {
+    public void updateActive(String instance, EventJob eventJob, long activeTime) {
         try {
-            executeUpdate(updateActive
-                    , activeTime
-                    , instance
-                    , eventJob.getGroup()
-                    , eventJob.getName()
-            );
+            executeUpdate(updateActive, activeTime, instance, eventJob.getGroup(), eventJob.getName());
         } catch (JobException e) {
             throw e;
         } catch (Exception e) {
@@ -211,32 +170,32 @@ public class JdbcJobStoreImpl implements JobStore, InitializingBean {
     }
 
     @Override
-    public void delete(String instance, String group) throws JobException {
+    public void delete(String instance, String group) {
         executeUpdate(deleteByGroup, instance, group);
     }
 
     @Override
-    public void delete(String instance, String group, String name) throws JobException {
+    public void delete(String instance, String group, String name) {
         executeUpdate(delete, instance, group, name);
     }
 
     @Override
-    public void enable(String instance, String group) throws JobException {
+    public void enable(String instance, String group) {
         executeUpdate(updateEnabledByGroup, 1, instance, group);
     }
 
     @Override
-    public void enable(String instance, String group, String name) throws JobException {
+    public void enable(String instance, String group, String name) {
         executeUpdate(updateEnabled, 1, instance, group, name);
     }
 
     @Override
-    public void disable(String instance, String group) throws JobException {
+    public void disable(String instance, String group) {
         executeUpdate(updateEnabledByGroup, 0, instance, group);
     }
 
     @Override
-    public void disable(String instance, String group, String name) throws JobException {
+    public void disable(String instance, String group, String name) {
         executeUpdate(updateEnabled, 0, instance, group, name);
     }
 
@@ -246,10 +205,7 @@ public class JdbcJobStoreImpl implements JobStore, InitializingBean {
     }
 
     @Override
-    public int compete(
-            String instance, String group, String name
-            , long nextTime, long startTime
-    ) {
+    public int compete(String instance, String group, String name, long nextTime, long startTime) {
         Connection connection = null;
         try {
             connection = dataSource.getConnection();
@@ -265,10 +221,7 @@ public class JdbcJobStoreImpl implements JobStore, InitializingBean {
     }
 
     @Override
-    public int compete(
-            String instance, String group, String name
-            , long startTime
-    ) {
+    public int compete(String instance, String group, String name, long startTime) {
         Connection connection = null;
         try {
             connection = dataSource.getConnection();
@@ -299,9 +252,7 @@ public class JdbcJobStoreImpl implements JobStore, InitializingBean {
         }
     }
 
-    public JobStatus getStatus(
-            String instance, String group, String name
-    ) {
+    public JobStatus getStatus(String instance, String group, String name) {
         Connection connection = null;
         try {
             connection = dataSource.getConnection();
@@ -309,12 +260,7 @@ public class JdbcJobStoreImpl implements JobStore, InitializingBean {
             setValue(ps, instance, group, name);
             ResultSet rs = ps.executeQuery();
             if (rs.next()) {
-                return new JobStatus(
-                        rs.getInt(1)
-                        , rs.getLong(2)
-                        , rs.getLong(3)
-                        , rs.getBoolean(4)
-                );
+                return new JobStatus(rs.getInt(1), rs.getLong(2), rs.getLong(3), rs.getBoolean(4));
             }
             return null;
         } catch (Exception e) {
@@ -357,17 +303,6 @@ public class JdbcJobStoreImpl implements JobStore, InitializingBean {
 
     private EventJob to(ResultSet rs) throws SQLException, JsonProcessingException {
         int index = 1;
-        return new EventJob(
-                rs.getString(index++)
-                , rs.getString(index++)
-                , rs.getString(index++)
-                , rs.getString(index++)
-                , rs.getString(index++)
-                , rs.getString(index++)
-                , rs.getString(index++)
-                , rs.getString(index++)
-                , rs.getBoolean(index++)
-                , om.readValue(rs.getString(index), dataType)
-        );
+        return new EventJob(rs.getString(index++), rs.getString(index++), rs.getString(index++), rs.getString(index++), rs.getString(index++), rs.getString(index++), rs.getString(index++), rs.getString(index++), rs.getBoolean(index++), om.readValue(rs.getString(index), dataType));
     }
 }

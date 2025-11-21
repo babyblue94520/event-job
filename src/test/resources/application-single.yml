@@ -8,3 +8,6 @@ event-job:
   update-active-interval: PT1S
   reload-interval: PT1S
   thread-count: 4
+#logging:
+#  level:
+#    pers.clare: debug

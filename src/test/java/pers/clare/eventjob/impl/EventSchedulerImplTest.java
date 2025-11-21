@@ -14,8 +14,11 @@ import pers.clare.test.ApplicationTest2;
 import pers.clare.test.eventjob.EventJobMessageServiceImpl;
 import pers.clare.test.eventjob.EventJobRegister;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -313,7 +316,7 @@ class EventSchedulerImplTest {
         }
 
         @Test
-        @Order(13)
+        @Order(12)
         void longHandler() throws InterruptedException {
             AtomicInteger count = new AtomicInteger();
             EventJob job = EventJob.builder()
@@ -335,7 +338,7 @@ class EventSchedulerImplTest {
         }
 
         @Test
-        @Order(12)
+        @Order(13)
         void abortOnError() throws InterruptedException {
             AtomicInteger count = new AtomicInteger();
             AtomicInteger count2 = new AtomicInteger();
@@ -367,7 +370,7 @@ class EventSchedulerImplTest {
         }
 
         @Test
-        @Order(13)
+        @Order(14)
         void updateJob() throws InterruptedException {
             EventJob job = EventJob.builder()
                     .group("test")
@@ -422,6 +425,48 @@ class EventSchedulerImplTest {
             }
             assertEquals(target, next);
         }
+
+
+        @Test
+        @Order(14)
+        void testRemoveAndAdd() throws InterruptedException, ExecutionException {
+            int thread = 5;
+            ExecutorService executor = Executors.newFixedThreadPool(thread);
+
+            int time = 30000;
+            long endTime = System.currentTimeMillis() + time;
+            List<Future<?>> futures = new ArrayList<>();
+            for (int i = 0; i < thread; i++) {
+                futures.add(executor.submit(() -> {
+                    Random random = new Random();
+                    int range = 100;
+                    while (System.currentTimeMillis() < endTime) {
+                        var job = getJob(random.nextInt(range));
+                        eventScheduler.add(job);
+                        job = getJob(random.nextInt(range));
+                        eventScheduler.disable(job.getGroup(), job.getName());
+                        job = getJob(random.nextInt(range));
+                        eventScheduler.enable(job.getGroup(), job.getName());
+                        job = getJob(random.nextInt(range));
+                        eventScheduler.remove(job.getGroup(), job.getName());
+                    }
+                }));
+            }
+            for (Future<?> future : futures) {
+                future.get();
+            }
+        }
+
+        EventJob getJob(int n) {
+            return EventJob.builder()
+                    .group("job")
+                    .name(n + "")
+                    .event(n + "")
+                    .cron("* * * * * ?")
+                    .timezone("+00:00")
+                    .build();
+        }
+
     }
 
     @DisplayName("Cluster")

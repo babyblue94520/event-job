@@ -5,6 +5,7 @@ import pers.clare.eventjob.vo.EventJob;
 import org.springframework.lang.NonNull;
 import pers.clare.eventjob.function.JobHandler;
 
+import java.sql.SQLException;
 import java.util.List;
 
 @SuppressWarnings("unused")
